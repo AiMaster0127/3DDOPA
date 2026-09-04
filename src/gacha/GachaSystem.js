@@ -15,11 +15,24 @@ export class GachaSystem {
    * @param {import('./Inventory.js').Inventory} o.inventory
    * @param {import('../core/RNG.js').RNG} o.rng
    */
-  constructor({ save, inventory, rng }) {
+  constructor({ save, inventory, rng, meta }) {
     this.save = save;
     this.inventory = inventory;
     this.rng = rng;
+    this.meta = meta;                 // 解放状況とダブり強化粉の倍率を見る
     this.banner = GACHA.banners[0];
+  }
+
+  /** いま引けるバナー。unlock が要る物は実績で解放されてから出す。 */
+  availableBanners() {
+    return GACHA.banners.filter(b => !b.unlock || (this.meta && this.meta.isUnlocked(b.unlock)));
+  }
+
+  setBanner(id) {
+    const b = this.availableBanners().find(x => x.id === id);
+    if (!b) return false;
+    this.banner = b;
+    return true;
   }
 
   get state() { return this.save.data.gacha; }
@@ -47,21 +60,26 @@ export class GachaSystem {
    */
   _pickRarity(ssrRate) {
     const base = GACHA.baseRates;
+    const skip = this.banner.excludeRarity || [];
     const rest = 1 - ssrRate;
-    const baseRestSum = 1 - base.SSR;
+
+    // 除外レアを抜いたぶんは、残ったレアの元比率に応じて配り直す
+    let baseRestSum = 0;
+    for (const rar of RARITIES) if (rar !== 'SSR' && !skip.includes(rar)) baseRestSum += base[rar];
 
     let r = this.rng.next();
     if (r < ssrRate) return 'SSR';
     r -= ssrRate;
 
+    let last = 'N';
     for (const rar of RARITIES) {
-      if (rar === 'SSR') continue;
-      // 元の比率を保ったまま残りの確率質量へ押し込める
+      if (rar === 'SSR' || skip.includes(rar)) continue;
+      last = rar;
       const w = baseRestSum > 0 ? (base[rar] / baseRestSum) * rest : 0;
       if (r < w) return rar;
       r -= w;
     }
-    return 'N';
+    return last;
   }
 
   _pickWeapon(rarity) {

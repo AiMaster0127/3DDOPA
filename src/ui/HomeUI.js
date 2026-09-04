@@ -13,7 +13,7 @@ export class HomeUI {
    * @param {import('../save/SaveManager.js').SaveManager} o.save
    * @param {import('../progression/MetaSystem.js').MetaSystem} o.meta
    */
-  constructor({ inventory, save, meta, onSortie, onGacha, onInventory, onStages }) {
+  constructor({ inventory, save, meta, onSortie, onGacha, onInventory, onStages, onUpgrade, onAchievements }) {
     this.inv = inventory;
     this.save = save;
     this.meta = meta;
@@ -33,7 +33,12 @@ export class HomeUI {
     document.getElementById('btnGacha').addEventListener('click', onGacha);
     document.getElementById('btnInv').addEventListener('click', onInventory);
     document.getElementById('btnStages').addEventListener('click', onStages);
+    document.getElementById('btnUpgrade').addEventListener('click', onUpgrade);
+    document.getElementById('btnAch').addEventListener('click', onAchievements);
+    this.elAch = document.getElementById('hAch');
   }
+
+  setAchievementProgress(text) { this.elAch.textContent = text; }
 
   /** 出撃ボタンに、いま選んでいるステージを出す。 */
   setStage(stage) {

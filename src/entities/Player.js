@@ -53,7 +53,8 @@ export class Player {
     this.iframe = 0;
     this.swing = 0;
     this.speed01 = 0;
-    this.runLv = 1;
+    // ★runLv はここで触らない。LevelSystem が唯一の持ち主。
+    //   ここで1に戻すと、開始レベルの強化（先達の記憶）が毎回消える。
   }
 
   /**

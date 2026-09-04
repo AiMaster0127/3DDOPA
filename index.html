@@ -67,9 +67,40 @@
         <button id="btnGacha" class="home-btn">ガチャ</button>
         <button id="btnInv" class="home-btn">装備</button>
       </div>
+      <div class="home-row">
+        <button id="btnUpgrade" class="home-btn">拠点強化</button>
+        <button id="btnAch" class="home-btn">実績<small id="hAch">0/0</small></button>
+      </div>
       <p class="home-best" id="hBest"></p>
     </div>
   </div>
+
+  <!-- ===== 拠点強化 ===== -->
+  <div id="upgrade" class="panel" hidden>
+    <header class="panel-top">
+      <button id="upBack" class="panel-back" type="button">← 戻る</button>
+      <div class="wallet"><span class="w-item">💎 <b id="uGems">0</b></span></div>
+    </header>
+    <div class="stage-body">
+      <p class="panel-lead">ここで買った強化は<b>すべてのラン</b>に永続で乗る。</p>
+      <div class="up-list" id="upList"></div>
+    </div>
+  </div>
+
+  <!-- ===== 実績 ===== -->
+  <div id="achieve" class="panel" hidden>
+    <header class="panel-top">
+      <button id="achBack" class="panel-back" type="button">← 戻る</button>
+      <div class="wallet"><span class="w-item" id="aProgress">0/0</span></div>
+    </header>
+    <div class="stage-body">
+      <p class="panel-lead">達成した瞬間に報酬が入る。受け取り操作は要らない。</p>
+      <div class="ach-list" id="achList"></div>
+    </div>
+  </div>
+
+  <!-- ===== 実績トースト ===== -->
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <!-- ===== ステージ選択 ===== -->
   <div id="stages" class="panel" hidden>
@@ -93,6 +124,7 @@
     </header>
 
     <div class="gacha-body">
+      <div class="banner-tabs" id="bannerTabs"></div>
       <h2 class="gacha-name" id="gBannerName">スタンダード</h2>
       <p class="gacha-pickup">ピックアップ：<b id="gFeatured">—</b></p>
 

@@ -48,6 +48,20 @@ export const GACHA = {
       featuredChance: 0.5,        // SSR確定時、50%でピックアップ
       guaranteeAfterLoss: true,   // すり抜けたら次のSSRは確定でピックアップ
       exclude: [],
+      unlock: null,               // 最初から引ける
+    },
+    {
+      // ★実績「深淵踏破」（ステージ8クリア）で解放される上級バナー。
+      //   N を排出プールから外すぶん、当たりの密度が上がる。
+      //   確率テーブル自体は共通なので、公平性の検証は1つで足りる。
+      id: 'prime',
+      name: 'プライム',
+      featured: ['wp_ruin_cannon', 'wp_thunder_god'],
+      featuredChance: 0.6,
+      guaranteeAfterLoss: true,
+      exclude: [],
+      excludeRarity: ['N'],       // Nを引かない（そのぶんRに寄る）
+      unlock: 'banner_prime',
     },
   ],
 

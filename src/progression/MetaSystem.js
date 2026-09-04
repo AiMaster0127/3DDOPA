@@ -8,11 +8,18 @@
  * 拠点での強化購入・アンロック・実績はフェーズ6でここに足す。
  */
 import { BALANCE } from '../data/balance.js';
+import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
+import { ACHIEVEMENTS } from '../data/achievements.js';
+import { WEAPON_BY_ID } from '../data/weapons.js';
 
 export class MetaSystem {
-  /** @param {import('../save/SaveManager.js').SaveManager} save */
-  constructor(save) {
+  /**
+   * @param {import('../save/SaveManager.js').SaveManager} save
+   * @param {(a:object)=>void} [onAchievement] 実績達成の通知
+   */
+  constructor(save, onAchievement) {
     this.save = save;
+    this.onAchievement = onAchievement || (() => {});
     if (!this.save.data.profile.createdAt) {
       this.save.data.profile.createdAt = Date.now();
       this.save.markDirty();
@@ -28,17 +35,95 @@ export class MetaSystem {
 
   /**
    * 永続強化ぶんのステータス補正。SkillSystem.recompute がこれを土台にする。
-   * ★アカウントレベル + 拠点強化（フェーズ6）の合算をここ1箇所で出す。
+   * ★アカウントレベル + 拠点強化の合算をここ1箇所で出す。
+   *   強化の効果式は data/upgrades.js の apply() にしか書かない。
    */
   bonus() {
     const per = BALANCE.accountLevel.perLevel;
     const n = this.meta.accountLv - 1;
-    const up = this.meta.upgrades;
-    return {
-      maxHpPct: per.maxHpPct * n + up.hp * 0.03,
-      atkPct: per.atkPct * n + up.atk * 0.025,
-      speedPct: up.speed * 0.02,
+
+    const s = {
+      maxHpPct: per.maxHpPct * n,
+      atkPct: per.atkPct * n,
+      speedPct: 0, critAdd: 0, rateAdd: 0, pickupPct: 0, drAdd: 0,
     };
+    for (const u of UPGRADES) {
+      const lv = this.levelOf(u.id);
+      if (lv > 0) u.apply(s, lv);
+    }
+    return s;
+  }
+
+  // ─────────── 拠点強化 ───────────
+
+  levelOf(id) { return this.meta.upgrades[id] | 0; }
+
+  /** 次の段階の費用。上限なら null。 */
+  upgradeCost(id) {
+    const u = UPGRADE_BY_ID.get(id);
+    if (!u) return null;
+    const lv = this.levelOf(id);
+    return lv >= u.max ? null : u.cost(lv);
+  }
+
+  canBuy(id) {
+    const c = this.upgradeCost(id);
+    return c !== null && this.save.data.wallet.gems >= c;
+  }
+
+  buyUpgrade(id) {
+    if (!this.canBuy(id)) return false;
+    this.save.data.wallet.gems -= this.upgradeCost(id);
+    this.meta.upgrades[id] = this.levelOf(id) + 1;
+    this.save.saveNow();
+    return true;
+  }
+
+  /** ランの開始レベル（強化 'startLv' ぶん）。 */
+  get startLevel() { return 1 + this.levelOf('startLv'); }
+
+  /** ガチャのダブりで得る強化粉の倍率（強化 'dust' ぶん）。 */
+  get dustBonus() { return 1 + this.levelOf('dust') * 0.15; }
+
+  // ─────────── 実績 ───────────
+
+  isUnlocked(flag) { return this.meta.unlocks.includes(flag); }
+
+  /**
+   * 達成判定。達成した瞬間に報酬を入れる（受け取り操作は挟まない）。
+   * ★節目（ラン終了・ガチャ・強化）でだけ呼ぶ。毎フレーム呼ぶものではない。
+   * @returns {Array} 新たに達成した実績
+   */
+  checkAchievements() {
+    const done = this.save.data.achievements;
+    const total = WEAPON_BY_ID.size;
+    const gained = [];
+
+    for (const a of ACHIEVEMENTS) {
+      if (done[a.id]) continue;
+      let ok = false;
+      try { ok = !!a.check(this.save.data, total); }
+      catch (err) { console.warn(`実績 ${a.id} の判定で例外`, err); continue; }
+      if (!ok) continue;
+
+      done[a.id] = true;
+      if (a.reward) {
+        this.save.data.wallet.gems += a.reward.gems || 0;
+        this.save.data.wallet.tickets += a.reward.tickets || 0;
+      }
+      if (a.unlock && !this.meta.unlocks.includes(a.unlock)) this.meta.unlocks.push(a.unlock);
+      gained.push(a);
+      this.onAchievement(a);
+    }
+
+    if (gained.length) this.save.saveNow();
+    return gained;
+  }
+
+  /** 達成数 / 総数 */
+  achievementProgress() {
+    const done = this.save.data.achievements;
+    return { have: ACHIEVEMENTS.filter(a => done[a.id]).length, total: ACHIEVEMENTS.length };
   }
 
   /**
@@ -69,6 +154,9 @@ export class MetaSystem {
     // ★ラン終了は失うと痛い。遅延ではなく即時書き込む
     this.save.saveNow();
 
-    return { xpGained, levelsGained, newLevel: this.meta.accountLv };
+    // 実績は節目でだけ判定する
+    const achievements = this.checkAchievements();
+
+    return { xpGained, levelsGained, newLevel: this.meta.accountLv, achievements };
   }
 }

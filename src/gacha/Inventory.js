@@ -11,6 +11,8 @@ export class Inventory {
   /** @param {import('../save/SaveManager.js').SaveManager} save */
   constructor(save) {
     this.save = save;
+    /** 拠点強化「錬成」の倍率を供給する関数。Game が差し込む。 */
+    this.dustBonus = () => 1;
     this._ensureStarter();
   }
 
@@ -61,7 +63,7 @@ export class Inventory {
     }
 
     const shards = GACHA.dupe.shards;
-    const dust = GACHA.dupe.dust[rarity] ?? 0;
+    const dust = Math.round((GACHA.dupe.dust[rarity] ?? 0) * this.dustBonus());
     existing.shards += shards;
     this.wallet.dust += dust;
     return { weapon, rarity, dupe: true, shards, dust };

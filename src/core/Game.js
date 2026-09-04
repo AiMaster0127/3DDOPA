@@ -43,6 +43,7 @@ import { HomeUI } from '../ui/HomeUI.js';
 import { GachaUI } from '../ui/GachaUI.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
 import { StageUI } from '../ui/StageUI.js';
+import { MetaUI } from '../ui/MetaUI.js';
 
 import { SKILL_BY_ID } from '../data/skills.js';
 import { validateGacha } from '../data/gacha.js';
@@ -69,9 +70,13 @@ export class Game {
 
     // ★セーブは最初に読む。永続強化がステータス計算の土台になる
     this.save = new SaveManager();
-    this.meta = new MetaSystem(this.save);
+    // 実績の達成通知はUI生成後に届くので、参照を遅延させる
+    this.meta = new MetaSystem(this.save, (a) => this.metaUI?.toast(a));
     this.inventory = new Inventory(this.save);
-    this.gacha = new GachaSystem({ save: this.save, inventory: this.inventory, rng: this.rng });
+    this.inventory.dustBonus = () => this.meta.dustBonus;
+    this.gacha = new GachaSystem({
+      save: this.save, inventory: this.inventory, rng: this.rng, meta: this.meta,
+    });
 
     // ---- 描画 ----
     this.scene = new SceneManager(canvas, TIERS[initialTier].aa);
@@ -117,6 +122,7 @@ export class Game {
     });
     this.levels = new LevelSystem({
       player: this.player, skills: this.skills, events: this.events,
+      startLevel: () => this.meta.startLevel,
     });
 
     // 論理と描画をつなぐ層
@@ -144,16 +150,24 @@ export class Game {
       onGacha: () => { this.homeUI.hide(); this.gachaUI.show(); },
       onInventory: () => { this.homeUI.hide(); this.inventoryUI.show(); },
       onStages: () => { this.homeUI.hide(); this.stageUI.show(); },
+      onUpgrade: () => { this.homeUI.hide(); this.metaUI.showUpgrades(); },
+      onAchievements: () => { this.homeUI.hide(); this.metaUI.showAchievements(); },
     });
     this.gachaUI = new GachaUI({
       gacha: this.gacha, director: this.gachaDirector,
       onBack: () => { this.gachaUI.hide(); this.homeUI.show(); },
-      onClosed: () => this.homeUI.refresh(),
+      onClosed: () => { this.meta.checkAchievements(); this.homeUI.refresh(); },
     });
     this.inventoryUI = new InventoryUI({
       inventory: this.inventory,
       onEquip: (id) => this.equip(id),
       onBack: () => { this.inventoryUI.hide(); this.homeUI.show(); },
+    });
+    this.metaUI = new MetaUI({
+      meta: this.meta, save: this.save,
+      onBack: () => { this.metaUI.hideUpgrades(); this.metaUI.hideAchievements(); this.homeUI.show(); },
+      // 強化を買ったら、次のランを待たずにステータスを組み直す
+      onChanged: () => { this.skills.recompute(); this.homeUI.refresh(); },
     });
     this.stageUI = new StageUI({
       save: this.save,
@@ -313,6 +327,8 @@ export class Game {
     this.screens.hideGameOver();
     this.stageUI.hideClear();
     this.stageUI.hide();
+    this.metaUI.hideUpgrades();
+    this.metaUI.hideAchievements();
     this.levelUpUI.hide();
     this.hud.hide();
     this.bossView.detach();
@@ -323,7 +339,10 @@ export class Game {
     this.pickups.despawnAll();
     this.grid.clear();
 
+    // 拠点に入るたびに実績を見直す（強化やガチャで条件を満たしている場合がある）
+    this.meta.checkAchievements();
     this.homeUI.setStage(STAGE_BY_ID.get(this.stageId));
+    this.homeUI.setAchievementProgress(this.metaUI.progressText());
     this.homeUI.show();
   }
 
@@ -334,6 +353,8 @@ export class Game {
     this.inventoryUI.hide();
     this.stageUI.hide();
     this.stageUI.hideClear();
+    this.metaUI.hideUpgrades();
+    this.metaUI.hideAchievements();
     this.screens.hideGameOver();
     this.hud.show();
     this.bossView.detach();
@@ -344,11 +365,17 @@ export class Game {
 
     this.runGems = 0;
 
-    // ★順序が重要：スキルを消す → ステータスを組み直す → その値でHPを決める
+    // ★順序が重要。入れ替えると開始レベルぶんのHPが消える。
+    //   1. スキルを消す
+    //   2. 開始レベルを決める（runLv が入る。HPには触らない）
+    //   3. runLv と永続強化からステータスを組み直す
+    //   4. そのステータスで maxHp を決める
+    //   5. 開始レベルぶんのHPを上乗せする
     this.skills.reset();
     this.levels.reset();
     this.skills.recompute();
     this.player.reset();
+    this.levels.applyStartHp();
 
     this.enemies.despawnAll();
     this.projectiles.despawnAll();

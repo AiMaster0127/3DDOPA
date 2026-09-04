@@ -432,6 +432,91 @@ check(stage.clear.state === 'dead' && stage.clear.screen && stage.clear.marked &
       'ボス撃破でクリア・報酬・次ステージ解禁',
       `報酬 💎${stage.clear.gained} / ステージ4解禁 ${stage.clear.unlocked4}`);
 
+// ---- メタ進行（フェーズ6） ----
+const metaRes = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = {};
+
+  g.goHome();
+  await wait(120);
+
+  // 拠点強化：買うとステータスに乗る
+  g.save.data.wallet.gems = 200000;
+  const atk0 = g.meta.bonus().atkPct;
+  const gems0 = g.save.data.wallet.gems;
+  const cost = g.meta.upgradeCost('atk');
+  const bought = g.meta.buyUpgrade('atk');
+  g.skills.recompute();
+  out.upgrade = { bought, cost, spent: gems0 - g.save.data.wallet.gems,
+                  before: +atk0.toFixed(4), after: +g.meta.bonus().atkPct.toFixed(4),
+                  onPlayer: +g.player.stats.atkPct.toFixed(4) };
+
+  // 開始レベルの強化 → ランがそのレベルで始まる
+  g.meta.meta.upgrades.startLv = 2;
+  g.startRun();
+  await wait(120);
+  out.startLv = { level: g.levels.level, runLv: g.player.runLv, maxHp: g.player.maxHp };
+  g.meta.meta.upgrades.startLv = 0;
+
+  // 実績：条件を満たすと自動で達成し報酬が入る
+  g.save.data.achievements = {};
+  g.save.data.stats.totalKills = 0;
+  const w0 = g.save.data.wallet.gems;
+  g.save.data.stats.totalKills = 1200;
+  const got = g.meta.checkAchievements();
+  out.ach = { gained: got.map(a => a.id), gems: g.save.data.wallet.gems - w0,
+              progress: g.meta.achievementProgress() };
+
+  // アンロック：ステージ8クリアで上級バナーが解放される
+  const before = g.gacha.availableBanners().length;
+  g.save.data.meta.clearedStages[8] = true;
+  g.meta.checkAchievements();
+  const after = g.gacha.availableBanners().length;
+  out.unlock = { before, after, unlocked: g.meta.isUnlocked('banner_prime') };
+
+  // 上級バナーは N を排出しない
+  g.gacha.setBanner('prime');
+  g.save.data.wallet.gems = 300000;
+  let nCount = 0, total = 0;
+  for (let i = 0; i < 300; i++) {
+    const r = g.gacha.pullSingle();
+    if (!r) break;
+    total++;
+    if (r[0].rarity === 'N') nCount++;
+  }
+  out.prime = { total, nCount, banner: g.gacha.banner.id };
+  g.gacha.setBanner('standard');
+
+  // 永続保存
+  g.save.saveNow();
+  const raw = JSON.parse(localStorage.getItem('dopa_arena_save'));
+  out.saved = { atkUp: raw.meta.upgrades.atk, unlocks: raw.meta.unlocks,
+                achCount: Object.keys(raw.achievements).length };
+  return out;
+});
+
+check(metaRes.upgrade.bought && metaRes.upgrade.after > metaRes.upgrade.before &&
+      Math.abs(metaRes.upgrade.onPlayer - metaRes.upgrade.after) < 1e-6,
+      '拠点強化を買うと全ランに乗る',
+      `💎${metaRes.upgrade.spent} で 攻撃補正 +${(metaRes.upgrade.before * 100).toFixed(1)}% → +${(metaRes.upgrade.after * 100).toFixed(1)}%`);
+check(metaRes.startLv.level === 3 && metaRes.startLv.runLv === 3,
+      '開始レベルの強化がランに反映される',
+      `Lv.${metaRes.startLv.level} 開始 / 最大HP ${metaRes.startLv.maxHp}`);
+check(metaRes.ach.gained.length >= 2 && metaRes.ach.gems > 0,
+      '条件を満たすと実績が自動達成され報酬が入る',
+      `${metaRes.ach.gained.join(', ')} / 💎${metaRes.ach.gems} / 進捗 ${metaRes.ach.progress.have}/${metaRes.ach.progress.total}`);
+check(metaRes.unlock.after > metaRes.unlock.before && metaRes.unlock.unlocked,
+      '実績で新バナーが解放される',
+      `バナー ${metaRes.unlock.before} → ${metaRes.unlock.after} 種`);
+check(metaRes.prime.nCount === 0 && metaRes.prime.total > 200,
+      '上級バナーはNを排出しない',
+      `${metaRes.prime.total}回中 N ${metaRes.prime.nCount}回`);
+check(metaRes.saved.atkUp > 0 && metaRes.saved.unlocks.includes('banner_prime') &&
+      metaRes.saved.achCount > 0,
+      '強化・実績・解放がセーブに残る',
+      `強化Lv.${metaRes.saved.atkUp} / 解放 ${metaRes.saved.unlocks.join(',')} / 実績 ${metaRes.saved.achCount}件`);
+
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);
 check(st.hudFits, 'HUDが画面内に収まる', `${st.css} / 描画バッファ ${st.buf} / DPR ${st.dpr} / 垂直FOV ${st.fov} / ティア ${st.tier}`);

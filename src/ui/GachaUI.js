@@ -33,6 +33,7 @@ export class GachaUI {
     this.summary = document.getElementById('revealSummary');
     this.grid = document.getElementById('summaryGrid');
 
+    this.tabsEl = document.getElementById('bannerTabs');
     this.elRates = document.getElementById('gRates');
     this.elPity = document.getElementById('gPity');
     this.elGems = document.getElementById('gGems');
@@ -53,13 +54,37 @@ export class GachaUI {
 
   get visible() { return !this.root.hidden; }
 
+  /** バナー切り替え。解放済みが1つだけならタブを出さない。 */
+  _buildTabs() {
+    const list = this.gacha.availableBanners();
+    this.tabsEl.replaceChildren();
+    if (list.length < 2) return;
+
+    for (const b of list) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `banner-tab${b.id === this.gacha.banner.id ? ' active' : ''}`;
+      btn.textContent = b.name;
+      btn.addEventListener('click', () => {
+        if (!this.gacha.setBanner(b.id)) return;
+        this._buildStatic();
+        this.refresh();
+      });
+      this.tabsEl.appendChild(btn);
+    }
+  }
+
   _buildStatic() {
+    this._buildTabs();
     document.getElementById('gBannerName').textContent = this.gacha.banner.name;
     const feat = this.gacha.banner.featured
       .map(id => WEAPON_BY_ID.get(id)?.name || id).join('・');
     document.getElementById('gFeatured').textContent = feat || '—';
 
     // ★確率表はデータから生成する
+    const skipped = this.gacha.banner.excludeRarity || [];
+    const effective = effectiveRates(skipped);
+
     this.elRates.replaceChildren();
     for (const r of RARITIES) {
       const tr = document.createElement('tr');
@@ -67,7 +92,8 @@ export class GachaUI {
       td1.textContent = `${r}（${RARITY_COLOR[r].name}）`;
       td1.style.color = RARITY_COLOR[r].css;
       const td2 = document.createElement('td');
-      td2.textContent = `${(GACHA.baseRates[r] * 100).toFixed(1)}%`;
+      // 除外レアがあるバナーでは、そのぶんを残りのレアへ配り直した実効値を出す
+      td2.textContent = skipped.includes(r) ? '—' : `${(effective[r] * 100).toFixed(1)}%`;
       tr.append(td1, td2);
       this.elRates.appendChild(tr);
     }
@@ -76,7 +102,7 @@ export class GachaUI {
     document.getElementById('gCost10').textContent = `💎${GACHA.cost.ten}`;
   }
 
-  show() { this.root.hidden = false; this.refresh(); }
+  show() { this.root.hidden = false; this._buildStatic(); this.refresh(); }
   hide() { this.root.hidden = true; }
 
   refresh() {
@@ -202,4 +228,21 @@ export class GachaUI {
     this.refresh();
     this.onClosed?.();
   }
+}
+
+/**
+ * 除外レアを抜いたときの実効排出率。
+ * ★GachaSystem._pickRarity と同じ配り直し方をすること。
+ *   ここがズレると「表示と実際が違う」になる。
+ */
+function effectiveRates(skipped) {
+  const out = { SSR: GACHA.baseRates.SSR };
+  let restSum = 0;
+  for (const r of RARITIES) if (r !== 'SSR' && !skipped.includes(r)) restSum += GACHA.baseRates[r];
+  const rest = 1 - GACHA.baseRates.SSR;
+  for (const r of RARITIES) {
+    if (r === 'SSR') continue;
+    out[r] = skipped.includes(r) ? 0 : (GACHA.baseRates[r] / restSum) * rest;
+  }
+  return out;
 }

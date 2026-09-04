@@ -56,10 +56,33 @@ const r = await page.evaluate(async (N) => {
     if (!out.some(x => RARITY_RANK[x.rarity] >= RARITY_RANK[GACHA.pity.tenPullFloor])) tenFail++;
   }
 
+  // ── 上級バナー（Nを排出しない）の実効確率も検証する ──
+  // ★UIが出す実効値と、実際の排出が一致していないと「表示詐欺」になる
+  g.save.data.meta.unlocks = ['banner_prime'];
+  let prime = null;
+  if (g.gacha.setBanner('prime')) {
+    const pc = { N: 0, R: 0, SR: 0, SSR: 0 };
+    const M = Math.min(N, 60000);
+    for (let i = 0; i < M; i++) pc[g.gacha.pullSingle()[0].rarity]++;
+
+    // GachaSystem と同じ配り直し方で期待値を出す
+    const skip = ['N'];
+    const rest = 1 - GACHA.baseRates.SSR;
+    let restSum = 0;
+    for (const r of RARITIES) if (r !== 'SSR' && !skip.includes(r)) restSum += GACHA.baseRates[r];
+    const expect = { SSR: GACHA.baseRates.SSR };
+    for (const r of RARITIES) {
+      if (r === 'SSR') continue;
+      expect[r] = skip.includes(r) ? 0 : (GACHA.baseRates[r] / restSum) * rest;
+    }
+    prime = { counts: pc, M, expect };
+    g.gacha.setBanner('standard');
+  }
+
   g.save.saveNow = realSave;
   const avgGap = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
 
-  return { counts, N, ssrTotal, maxGapSSR, avgGap, tenFail, TEN,
+  return { counts, N, ssrTotal, maxGapSSR, avgGap, tenFail, TEN, prime,
            declared: GACHA.baseRates, hard: GACHA.pity.hard,
            softStart: GACHA.pity.softStart, floor: GACHA.pity.tenPullFloor,
            rarities: RARITIES };
@@ -94,6 +117,23 @@ else console.log(`  → 最悪ケースでも天井 ${r.hard} 回以内に収ま
 console.log('');
 console.log(`10連保証（${r.floor}以上）: ${r.TEN.toLocaleString('ja-JP')} 回中 ${r.tenFail} 回が保証割れ`);
 if (r.tenFail > 0) fails.push(`10連保証が働いていない (${r.tenFail} 件)`);
+
+if (r.prime) {
+  console.log('');
+  console.log(`上級バナー「プライム」（N除外）— ${r.prime.M.toLocaleString('ja-JP')} 回`);
+  for (const rar of r.rarities) {
+    const exp = r.prime.expect[rar];
+    const act = r.prime.counts[rar] / r.prime.M;
+    const ok = rar === 'SSR' ? (act - exp >= -0.002 && act - exp < 0.03)
+             : rar === 'N'   ? act === 0
+             : Math.abs(act - exp) < 0.008;
+    if (!ok) fails.push(`プライム ${rar}: 期待 ${(exp * 100).toFixed(1)}% に対し実測 ${(act * 100).toFixed(2)}%`);
+    console.log(`  ${rar.padEnd(4)} 期待 ${(exp * 100).toFixed(1).padStart(5)}%  実測 ${(act * 100).toFixed(2).padStart(6)}%  ${ok ? 'OK' : 'NG'}`);
+  }
+} else {
+  console.log('\n上級バナーを検証できなかった（解放に失敗）');
+  fails.push('上級バナーの検証ができない');
+}
 
 if (errors.length) fails.push(`ページエラー: ${errors.join(' | ')}`);
 await browser.close();
