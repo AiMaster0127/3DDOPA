@@ -9,6 +9,7 @@ import { BALANCE } from '../data/balance.js';
 import { lerp, wrapAngle, damp } from '../core/math.js';
 import { withRim, makeGlowSprite } from './materials.js';
 import { makeGlowTexture, makeBlobTexture } from './textures.js';
+import { makeWeaponGeometry } from './geometry.js';
 
 const ACCENT = 0x43e8ff;
 const ACCENT2 = 0xff3ea5;
@@ -64,11 +65,12 @@ export class PlayerView {
       new THREE.MeshStandardMaterial({ color: 0xc9d4e2, roughness: 0.3, metalness: 0.65 }),
       { color: 0xbfe8ff, power: 2.2, strength: 0.9 }
     );
-    this.weapon = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.3), this.weaponMat);
+    this.weapon = new THREE.Mesh(makeWeaponGeometry('sword'), this.weaponMat);
     this.weapon.position.set(p.radius + 0.14, 0, 0.15);
     this.weapon.rotation.x = -0.28;
     this.weapon.castShadow = true;
     this.weaponPivot.add(this.weapon);
+    this._weaponModel = 'sword';
 
     this.body.add(torso, core, head, nose, this.weaponPivot);
 
@@ -190,6 +192,16 @@ export class PlayerView {
     this.weaponMat.color.setHex(weapon.visual.color);
     this.weaponMat.emissive.setHex(weapon.visual.emissive || 0x000000);
     this.weaponMat.emissiveIntensity = weapon.visual.emissive ? 0.8 : 0;
+
+    // ★武器ごとに形を作り直す。引いた武器が違って見えないとガチャの意味が半減する。
+    //   装備変更は頻度が低いので、その都度作ってよい。
+    const model = weapon.visual.model || 'sword';
+    if (model !== this._weaponModel) {
+      this._weaponModel = model;
+      this.weapon.geometry.dispose();
+      this.weapon.geometry = makeWeaponGeometry(model);
+    }
+    this.weapon.scale.setScalar(weapon.visual.scale || 1);
 
     const isMelee = weapon.attack.kind === 'melee_arc';
     this.arc.visible = false;

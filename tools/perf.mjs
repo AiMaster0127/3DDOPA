@@ -39,6 +39,10 @@ const r = await page.evaluate(async (LOAD) => {
   // ★レベルアップ選択が開くと state が変わり update() が即returnして
   //   「速い」という誤った計測値になる。計測中は選択画面を開かせない。
   g._showLevelUp = () => { g.levels.pending = 0; };
+  // ★計測は合計で何千フレームも回す＝ゲーム内で何分も進む。
+  //   放っておくとステージがクリアになり state が dead へ移って
+  //   update() が素通りし、計測が無意味になる。クリアさせない。
+  g._onStageClear = () => {};
   for (let ring = 0; ring < 5; ring++) g.spawner.spawnBurst(LOAD / 5, g.player, 3 + ring * 2.5);
   for (let i = 0; i < 60; i++) g.update(STEP);              // 配置を落ち着かせる
 
@@ -46,6 +50,11 @@ const r = await page.evaluate(async (LOAD) => {
   //   自機が倒しきってしまうので、HPを実質無限にして密度を保つ。
   const hold = () => {
     for (const e of g.enemies.list) if (e.active) { e.maxHp = 1e9; e.hp = 1e9; }
+    // 経過時間を巻き戻して、ステージが終わらないようにする
+    g.spawner.elapsed = Math.min(g.spawner.elapsed, 8);
+    g.spawner.cleared = false;
+    g.spawner.timeUp = false;
+    g.state = 'playing';
   };
   hold();
   const loaded = g.enemies.count;
@@ -66,17 +75,26 @@ const r = await page.evaluate(async (LOAD) => {
   };
 
   // ---- ループ内アロケーション：600フレーム回してヒープ増加を見る ----
-  hold();
-  globalThis.gc?.();
-  await new Promise(res => setTimeout(res, 60));
-  const h0 = performance.memory?.usedJSHeapSize ?? 0;
-  for (let i = 0; i < 600; i++) {
-    g.update(STEP);
-    g.instances.sync(0.5);
-    g.playerView.sync(g.player, 0.5, STEP);
-    g.cameraRig.follow(g.player, STEP);
+  // ★ヒープ増加はGCの走るタイミングで大きくぶれる。
+  //   1回だけ測ると、たまたまGCが走らなかった回に「増えた」と誤検出する。
+  //   複数回測って最小値を採る：ループが本当に確保していれば
+  //   どの回も大きな正の値になるので、これで見逃しはしない。
+  let heapDelta = Infinity;
+  for (let trial = 0; trial < 3; trial++) {
+    hold();
+    globalThis.gc?.();
+    await new Promise(res => setTimeout(res, 60));
+    const a = performance.memory?.usedJSHeapSize ?? 0;
+    for (let i = 0; i < 600; i++) {
+      g.update(STEP);
+      g.instances.sync(0.5);
+      g.playerView.sync(g.player, 0.5, STEP);
+      g.cameraRig.follow(g.player, STEP);
+    }
+    const b = performance.memory?.usedJSHeapSize ?? 0;
+    heapDelta = Math.min(heapDelta, b - a);
   }
-  const h1 = performance.memory?.usedJSHeapSize ?? 0;
+  const h0 = 0, h1 = heapDelta;
 
   const info = g.scene.renderer.info;
   return { parts, heapDelta: h1 - h0, measured: !!performance.memory, loaded,
@@ -99,7 +117,7 @@ const heapKb = r.heapDelta / 1024;
 
 console.log(`  ${'JS合計'.padEnd(18)} ${totalMs.toFixed(3).padStart(7)} ms / フレーム   (予算 ${JS_BUDGET_MS.toFixed(3)} ms)`);
 console.log('');
-console.log(`  600フレームのヒープ増加  ${heapKb.toFixed(1)} KB` + (r.measured ? '' : ' (performance.memory 利用不可)'));
+console.log(`  600フレームのヒープ増加  ${heapKb.toFixed(1)} KB（3回測って最小）` + (r.measured ? '' : ' (performance.memory 利用不可)'));
 console.log(`  draw calls ${r.draws} / triangles ${r.tris} / geometries ${r.geoms} / textures ${r.texs}`);
 console.log('');
 

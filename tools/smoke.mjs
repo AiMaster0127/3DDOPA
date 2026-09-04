@@ -71,14 +71,22 @@ if (VIEW.isMobile) {
   const ev = (t, x, y) => page.dispatchEvent('#gl', t, { pointerId: 1, pointerType: 'touch', clientX: x, clientY: y, isPrimary: true, bubbles: true });
   await ev('pointerdown', ox, oy);
   for (let i = 1; i <= 6; i++) await ev('pointermove', ox - i * 9, oy - i * 9);
-  await page.waitForTimeout(1000);
+  await page.waitForFunction((b) => {
+    const p = __DOPA.game.player;
+    return Math.hypot(p.x - b.x, p.z - b.z) > 1.5;
+  }, before, { timeout: 15000 }).catch(() => {});
   await ev('pointerup', ox - 54, oy - 54);
 } else {
   await page.keyboard.down('w'); await page.keyboard.down('d');
-  await page.waitForTimeout(1000);
+  // ★実時間で決め打ちに待つと、描画が重い環境ではゲーム内時間がほとんど進まず
+  //   「動かない」と誤検出する。動いたことを確認できるまで待つ。
+  await page.waitForFunction((b) => {
+    const p = __DOPA.game.player;
+    return Math.hypot(p.x - b.x, p.z - b.z) > 1.5;
+  }, before, { timeout: 15000 }).catch(() => {});
   await page.keyboard.up('w'); await page.keyboard.up('d');
 }
-await page.waitForTimeout(350);
+await page.waitForTimeout(200);
 
 const st = await page.evaluate(() => {
   const g = __DOPA.game, c = document.getElementById('gl');

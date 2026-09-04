@@ -54,7 +54,7 @@ export const ENEMIES = [
     charge: { windup: 0.7, dash: 0.45, speedMul: 5.2, cd: 2.4, range: 11 },
     element: 'none',
     resist: { ice: -0.3 },
-    visual: { geom: 'box', color: 0xe81d55, scale: 0.95, glow: 0xff8fb0 },
+    visual: { geom: 'wedge', color: 0xe81d55, scale: 0.95, glow: 0xff8fb0 },
   },
   {
     id: 'en_blob', name: 'ブロブ', tier: 2,
@@ -64,7 +64,7 @@ export const ENEMIES = [
     split: { id: 'en_blobling', count: 2 },  // 倒すと分裂する
     element: 'none',
     resist: { dark: 0.25 },
-    visual: { geom: 'sphere', color: 0x93cf1f, scale: 1.0, glow: 0xdcff7a },
+    visual: { geom: 'blob', color: 0x93cf1f, scale: 1.0, glow: 0xdcff7a },
   },
   {
     id: 'en_blobling', name: 'ブロブの欠片', tier: 1,

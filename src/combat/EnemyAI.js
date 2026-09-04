@@ -12,10 +12,18 @@
  *   ctx.summon(e, id, count)        取り巻きを呼ぶ
  */
 
+/**
+ * ★毎フレーム、敵の数だけ呼ばれる。
+ *   ここでオブジェクトを作って返すと、150体×毎秒15回＝毎秒2000個のゴミになり、
+ *   GCがフレームを削り始める。使い回しの1個に書き込んで返す。
+ *   （呼び出し側は即座に読むだけで、保持しないこと）
+ */
+const _t = { dx: 0, dz: 0, d: 1, nx: 0, nz: 1 };
 const toPlayer = (e, player) => {
   const dx = player.x - e.x, dz = player.z - e.z;
   const d = Math.hypot(dx, dz) || 1;
-  return { dx, dz, d, nx: dx / d, nz: dz / d };
+  _t.dx = dx; _t.dz = dz; _t.d = d; _t.nx = dx / d; _t.nz = dz / d;
+  return _t;
 };
 
 const stop = (e) => { e.vx = 0; e.vz = 0; };
@@ -104,9 +112,10 @@ function charger(e, player, dt) {
 // ─────────── ボス ───────────
 
 /** 現在のフェーズを更新し、そのフェーズの倍率を返す。 */
+const _noPhase = { speedMul: 1, cdMul: 1 };
 function updatePhase(e) {
   const phases = e.arch.phases;
-  if (!phases) return { speedMul: 1, cdMul: 1 };
+  if (!phases) return _noPhase;
   const pct = e.maxHp > 0 ? e.hp / e.maxHp : 0;
 
   let idx = 0;

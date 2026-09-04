@@ -17,6 +17,9 @@ export class CombatSystem {
 
     this.kills = 0;
     this.damageDealt = 0;
+
+    // computeDamage が返す使い回しの器
+    this._dmgOut = { amount: 0, isCrit: false };
   }
 
   reset() { this.kills = 0; this.damageDealt = 0; }
@@ -41,6 +44,9 @@ export class CombatSystem {
    * @param {number} atk      武器＋キャラ倍率まで乗せた攻撃力
    * @param {number} critRate 0..1
    * @param {number} critDmg  クリティカル時の追加倍率
+   * @returns {{amount:number, isCrit:boolean}}
+   *   ★使い回しの器を返す。乱戦では毎フレーム何十回も呼ばれるので、
+   *     都度オブジェクトを作るとGCの餌になる。呼び出し側は即座に読むこと。
    */
   computeDamage(atk, critRate, critDmg, element, enemy) {
     let dmg = atk * this.elementMul(element, enemy.arch);
@@ -48,8 +54,9 @@ export class CombatSystem {
     const isCrit = this.rng.next() < (critRate > 0.85 ? 0.85 : critRate);
     if (isCrit) dmg *= 1 + critDmg;
 
-    const amount = Math.max(BALANCE.combat.minDamage, Math.floor(dmg));
-    return { amount, isCrit };
+    this._dmgOut.amount = Math.max(BALANCE.combat.minDamage, Math.floor(dmg));
+    this._dmgOut.isCrit = isCrit;
+    return this._dmgOut;
   }
 
   /**

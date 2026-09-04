@@ -100,14 +100,23 @@ check(offlineBoot === 'READY', 'オフラインでも起動する', `bootMsg = "
 
 // 実際に遊べるところまで行くか
 await page.click('#startBtn').catch(() => {});
-await page.waitForTimeout(600);
+// ★ヘッドレスはソフトウェア描画。品質ティアが上がると実時間あたりのフレーム数が
+//   激減し、キーを押しても「ゲーム内時間が進まないので動かない」状態になる。
+//   ここで見たいのは描画性能ではなく「オフラインでも遊べるか」なので最低品質に固定する。
+await page.waitForFunction(() => !!globalThis.__DOPA?.game, null, { timeout: 15000 }).catch(() => {});
+await page.evaluate(() => __DOPA.game.quality.setMode('low'));
 // ★input.state を直接書いても Input.poll() が毎フレーム作り直すので効かない。
 //   実際のキー入力で動かすこと。
-await page.evaluate(() => globalThis.__DOPA?.game?.startRun());
-await page.waitForTimeout(700);
+await page.evaluate(() => __DOPA.game.startRun());
+await page.waitForFunction(() => __DOPA.game.state === 'playing', null, { timeout: 15000 }).catch(() => {});
 const before = await page.evaluate(() => ({ x: __DOPA.game.player.x, z: __DOPA.game.player.z }));
 await page.keyboard.down('w'); await page.keyboard.down('d');
-await page.waitForTimeout(700);
+// ★実時間で決め打ちに待つと、描画が重い環境ではゲーム内時間がほとんど進まず
+//   「動かない」と誤検出する。動いたことを確認できるまで待つ。
+await page.waitForFunction((b) => {
+  const g = __DOPA.game, p = g.player;
+  return Math.hypot(p.x - b.x, p.z - b.z) > 1.5 || g.state !== 'playing';
+}, before, { timeout: 20000 }).catch(() => {});
 await page.keyboard.up('w'); await page.keyboard.up('d');
 const playable = await page.evaluate((b) => {
   const g = globalThis.__DOPA?.game;

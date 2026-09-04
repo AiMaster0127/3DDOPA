@@ -12,6 +12,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { lerp, wrapAngle } from '../core/math.js';
 import { withRim } from './materials.js';
 import { makeGlowTexture } from './textures.js';
+import { makeEnemyGeometry } from './geometry.js';
 
 // ★毎フレーム new しない。全部モジュールスコープで使い回す
 const _m = new THREE.Matrix4();
@@ -31,25 +32,13 @@ const WHITE = new THREE.Color(1, 1, 1);
  */
 const RIM_BY_GEOM = {
   sphere:  { color: 0xdcf0ff, power: 3.4, strength: 0.55 },
+  blob:    { color: 0xdcf0ff, power: 3.4, strength: 0.55 },
   octa:    { color: 0xdcf0ff, power: 3.0, strength: 0.42 },
   cone:    { color: 0xdcf0ff, power: 3.2, strength: 0.38 },
   capsule: { color: 0xdcf0ff, power: 3.4, strength: 0.55 },
-  box:     { color: 0xbcd8ff, power: 4.5, strength: 0.22 },
+  box:     { color: 0xbcd8ff, power: 4.5, strength: 0.24 },
+  wedge:   { color: 0xbcd8ff, power: 4.5, strength: 0.24 },
 };
-
-/** data/enemies.js の visual.geom 文字列 → ジオメトリ。低ポリで揃える。 */
-function makeGeometry(kind) {
-  switch (kind) {
-    case 'sphere':  return new THREE.SphereGeometry(0.5, 10, 8);
-    case 'box':     return new THREE.BoxGeometry(0.95, 0.95, 0.95);
-    case 'octa':    return new THREE.OctahedronGeometry(0.6, 0);
-    case 'cone':    return new THREE.ConeGeometry(0.5, 1.1, 8);
-    case 'capsule': return new THREE.CapsuleGeometry(0.42, 0.6, 3, 8);
-    default:
-      console.warn(`未知の visual.geom: ${kind}。box で代用する`);
-      return new THREE.BoxGeometry(0.95, 0.95, 0.95);
-  }
-}
 
 export class InstanceLayer {
   /**
@@ -68,7 +57,7 @@ export class InstanceLayer {
     // ---- 敵：アーキタイプごとに1つ ----
     this.enemyIMs = ENEMIES.map(arch => {
       const im = new THREE.InstancedMesh(
-        makeGeometry(arch.visual.geom),
+        makeEnemyGeometry(arch.visual.geom),
         // ★マテリアルの色は白にしておく。実際の色は instanceColor で与える。
         //   こうしないと「被弾で白く光らせる」ができない（乗算では明るくできない）。
         // ★リムライトで輪郭を起こす。暗い床の上で敵の形が読めるかどうかは
