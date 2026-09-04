@@ -17,6 +17,9 @@ function baseStats() {
     rateAdd: 0,      // 攻撃速度
     pickupPct: 0,    // 経験値の回収範囲
     drAdd: 0,        // 被ダメージ軽減
+    // 武器の系統ごとの補正（キャラクターの得手不得手）
+    meleeAtkPct: 0,
+    rangedAtkPct: 0,
   };
 }
 

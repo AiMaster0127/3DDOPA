@@ -11,6 +11,7 @@ import { BALANCE } from '../data/balance.js';
 import { UPGRADES, UPGRADE_BY_ID } from '../data/upgrades.js';
 import { ACHIEVEMENTS } from '../data/achievements.js';
 import { WEAPON_BY_ID } from '../data/weapons.js';
+import { CHARACTERS, CHARACTER_BY_ID, DEFAULT_CHARACTER } from '../data/characters.js';
 
 export class MetaSystem {
   /**
@@ -46,12 +47,37 @@ export class MetaSystem {
       maxHpPct: per.maxHpPct * n,
       atkPct: per.atkPct * n,
       speedPct: 0, critAdd: 0, rateAdd: 0, pickupPct: 0, drAdd: 0,
+      meleeAtkPct: 0, rangedAtkPct: 0,
     };
     for (const u of UPGRADES) {
       const lv = this.levelOf(u.id);
       if (lv > 0) u.apply(s, lv);
     }
+    // ★キャラクターの得手不得手も同じ器に足す。
+    //   効果式は data/characters.js の apply() にしか書かない。
+    this.character.apply(s);
     return s;
+  }
+
+  // ─────────── キャラクター ───────────
+
+  /** 選択中のキャラ。壊れた保存値でも必ず既定へ落とす。 */
+  get character() {
+    const c = CHARACTER_BY_ID.get(this.meta.character);
+    if (c && this.isCharacterUnlocked(c)) return c;
+    return CHARACTER_BY_ID.get(DEFAULT_CHARACTER);
+  }
+
+  isCharacterUnlocked(c) { return !c.unlock || this.isUnlocked(c.unlock); }
+
+  availableCharacters() { return CHARACTERS.filter(c => this.isCharacterUnlocked(c)); }
+
+  selectCharacter(id) {
+    const c = CHARACTER_BY_ID.get(id);
+    if (!c || !this.isCharacterUnlocked(c)) return false;
+    this.meta.character = id;
+    this.save.saveNow();
+    return true;
   }
 
   // ─────────── 拠点強化 ───────────

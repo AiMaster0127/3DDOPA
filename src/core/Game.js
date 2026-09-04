@@ -48,6 +48,7 @@ import { GachaUI } from '../ui/GachaUI.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
 import { StageUI } from '../ui/StageUI.js';
 import { MetaUI } from '../ui/MetaUI.js';
+import { CharacterUI } from '../ui/CharacterUI.js';
 
 import { SKILL_BY_ID } from '../data/skills.js';
 import { validateGacha } from '../data/gacha.js';
@@ -165,6 +166,7 @@ export class Game {
       onGacha: () => { this.homeUI.hide(); this.gachaUI.show(); },
       onInventory: () => { this.homeUI.hide(); this.inventoryUI.show(); },
       onStages: () => { this.homeUI.hide(); this.stageUI.show(); },
+      onCharacters: () => { this.homeUI.hide(); this.characterUI.show(); },
       onUpgrade: () => { this.homeUI.hide(); this.metaUI.showUpgrades(); },
       onAchievements: () => { this.homeUI.hide(); this.metaUI.showAchievements(); },
     });
@@ -177,6 +179,11 @@ export class Game {
       inventory: this.inventory,
       onEquip: (id) => this.equip(id),
       onBack: () => { this.inventoryUI.hide(); this.homeUI.show(); },
+    });
+    this.characterUI = new CharacterUI({
+      meta: this.meta,
+      onSelect: (id) => this.selectCharacter(id),
+      onBack: () => { this.characterUI.hide(); this.homeUI.show(); },
     });
     this.metaUI = new MetaUI({
       meta: this.meta, save: this.save,
@@ -214,6 +221,7 @@ export class Game {
     this.runGems = 0;
 
     this.playerView.setWeapon(this.weapons.weapon);
+    this.playerView.setCharacter(this.meta.character);
     this._wireEvents();
 
     this.loop = new Loop({
@@ -394,6 +402,15 @@ export class Game {
     this.goHome();
   }
 
+  /** 使うキャラクターを選ぶ。ステータスと見た目をまとめて切り替える。 */
+  selectCharacter(id) {
+    if (!this.meta.selectCharacter(id)) return false;
+    this.skills.recompute();
+    this.playerView.setCharacter(this.meta.character);
+    this.homeUI.refresh();
+    return true;
+  }
+
   /** 遊ぶステージを選ぶ。 */
   selectStage(id) {
     this.stageId = id;
@@ -411,6 +428,7 @@ export class Game {
     this.stageUI.hide();
     this.metaUI.hideUpgrades();
     this.metaUI.hideAchievements();
+    this.characterUI.hide();
     this.levelUpUI.hide();
     this.hud.hide();
     this.bossView.detach();
@@ -427,6 +445,8 @@ export class Game {
 
     // 拠点に入るたびに実績を見直す（強化やガチャで条件を満たしている場合がある）
     this.meta.checkAchievements();
+    // 解放されたキャラの反映（見た目とステータス）
+    this.playerView.setCharacter(this.meta.character);
     this.homeUI.setStage(STAGE_BY_ID.get(this.stageId));
     this.homeUI.setAchievementProgress(this.metaUI.progressText());
     this.homeUI.show();
@@ -441,6 +461,7 @@ export class Game {
     this.stageUI.hideClear();
     this.metaUI.hideUpgrades();
     this.metaUI.hideAchievements();
+    this.characterUI.hide();
     this.screens.hideGameOver();
     this.hud.show();
     this.bossView.detach();

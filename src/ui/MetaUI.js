@@ -206,11 +206,19 @@ export class MetaUI {
   }
 }
 
+/** アンロックフラグ → 表示名。実績カードとトーストの両方で使う。 */
+const UNLOCK_LABEL = {
+  banner_prime: '上級ガチャ解放',
+  char_ranger: 'レンジャー解放',
+  char_bulwark: 'バルワーク解放',
+  char_arcanist: 'アーカニスト解放',
+};
+
 function rewardText(a) {
   if (!a.reward) return '';
   const parts = [];
   if (a.reward.gems) parts.push(`💎${a.reward.gems}`);
   if (a.reward.tickets) parts.push(`🎟${a.reward.tickets}`);
-  if (a.unlock) parts.push('新バナー解放');
+  if (a.unlock) parts.push(UNLOCK_LABEL[a.unlock] || '解放');
   return parts.join(' ・ ');
 }

@@ -53,7 +53,17 @@ export class WeaponSystem {
     const w = this.weapon;
     const own = this.own;
     const base = w.base.atk + w.growth.atk * (own.lv - 1);
-    return base * (1 + GACHA.limitBreak.atkPerLB * own.lb) * (1 + player.stats.atkPct);
+
+    // ★キャラクターの得手不得手。近接と射撃で別々に乗る。
+    //   ★|| 0 は保険。stats に欠けがあると NaN が伝播して
+    //     「敵が絶対に死なない」という原因の追いにくい壊れ方をする。
+    const kindBonus = (w.attack.kind === 'melee_arc'
+      ? player.stats.meleeAtkPct
+      : player.stats.rangedAtkPct) || 0;
+
+    return base
+      * (1 + GACHA.limitBreak.atkPerLB * own.lb)
+      * (1 + (player.stats.atkPct || 0) + kindBonus);
   }
 
   get range() { return this.weapon.base.range; }

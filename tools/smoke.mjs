@@ -55,6 +55,10 @@ if (bootMsg !== 'READY') { console.log(errors.join('\n') || logs.join('\n')); aw
 
 await page.click('#startBtn');
 await page.waitForTimeout(300);
+// ★ヘッドレスはソフトウェア描画なので、品質ティアが上がると
+//   実時間あたりのフレーム数が激減し、時間依存の検証が不安定になる。
+//   検証中は最低品質に固定して、描画ではなくロジックを見る。
+await page.evaluate(() => __DOPA.game.quality.setMode('low'));
 // ★フェーズ4以降、起動直後は拠点(HOME)。操作の検証には出撃が要る
 await page.evaluate(() => __DOPA.game.startRun());
 await page.waitForTimeout(700);
@@ -111,6 +115,18 @@ check(clamp.r <= clamp.arena, 'アリーナ外に出られない',
 const fight = await page.evaluate(async () => {
   const g = __DOPA.game;
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
   const out = {};
 
   const trial = async (weaponId, dist, ms, count) => {
@@ -118,7 +134,7 @@ const fight = await page.evaluate(async () => {
     g.equip(weaponId);
     g.player.takeDamage = () => false;              // 攻撃性能だけを見たいので不死にする
     const placed = g.spawner.spawnBurst(count, g.player, dist);
-    await wait(ms);
+    await waitGame(ms / 1000);
     return { placed, kills: g.combat.kills, dmg: Math.round(g.combat.damageDealt) };
   };
 
@@ -133,7 +149,7 @@ const fight = await page.evaluate(async () => {
   g.startRun();
   g.player.takeDamage = () => false;
   g.spawner.spawnBurst(40, g.player, 6);
-  await wait(1500);
+  await waitGame(1.5);
   const act = g.enemies.list.filter(e => e.active);
   let deep = 0;
   for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
@@ -148,7 +164,8 @@ const fight = await page.evaluate(async () => {
   delete g.player.takeDamage;                        // プロトタイプの実装に戻す
   g.player.hp = 10;
   g.spawner.spawnBurst(12, g.player, 2.0);
-  await wait(3000);
+  await until(() => g.player.dead, 4);
+  await wait(250);
   out.death = { dead: g.player.dead, state: g.state, over: !document.getElementById('over').hidden };
 
   // 再挑戦で完全に初期化されるか
@@ -176,6 +193,18 @@ check(fight.retry.state === 'playing' && fight.retry.kills === 0 && fight.retry.
 const prog = await page.evaluate(async () => {
   const g = __DOPA.game;
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
   const out = {};
 
   g.startRun();
@@ -186,10 +215,12 @@ const prog = await page.evaluate(async () => {
   // 敵を倒す → ジェムが落ちる → 吸い寄せて回収 → レベルアップ
   g.spawner.spawnBurst(30, g.player, 2.6);
   let sawGems = 0;
-  for (let i = 0; i < 40; i++) {
-    await wait(100);
-    sawGems = Math.max(sawGems, g.pickups.count);
-    if (g.state === 'levelup') break;
+  {
+    const w0 = Date.now();
+    while (g.state !== 'levelup' && Date.now() - w0 < 25000) {
+      await wait(60);
+      sawGems = Math.max(sawGems, g.pickups.count);
+    }
   }
   out.chain = { lv0, lv: g.levels.level, sawGems, kills: g.combat.kills,
                 state: g.state, uiVisible: !document.getElementById('levelup').hidden,
@@ -215,7 +246,7 @@ const prog = await page.evaluate(async () => {
   g.spawner.spawnBurst(12, g.player, 4.2);
   for (const e of g.enemies.list) if (e.active) e.speed = 0;   // 近寄らせない
   const dmg0 = g.combat.damageDealt;
-  await wait(1400);                         // ノヴァの初回は0.6秒後
+  await until(() => g.combat.damageDealt > dmg0, 3);   // ノヴァの初回は0.6秒後
   out.active = { dmg: g.combat.damageDealt - dmg0,
                  weaponTarget: !!g.autoAim.target };
   return out;
@@ -263,6 +294,18 @@ check(afterReload.lv === beforeReload.lv && afterReload.gems === beforeReload.ge
 const gear = await page.evaluate(async () => {
   const g = __DOPA.game;
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
   const out = {};
 
   // 拠点に戻れるか
@@ -300,8 +343,10 @@ const gear = await page.evaluate(async () => {
   g.equip(strongest.id);
   g.startRun();
   await wait(120);
+  // ★atkOf は武器そのものの強さ。比較のため成長・キャラ補正をゼロにした器を渡す
+  const zero = { stats: { atkPct: 0, meleeAtkPct: 0, rangedAtkPct: 0 } };
   const shown = g.inventory.atkOf(strongest.id);
-  const actual = g.weapons.effectiveAtk({ stats: { atkPct: 0 } });
+  const actual = g.weapons.effectiveAtk(zero);
   out.equip = { id: strongest.id, equipped: g.inventory.equippedId,
                 weapon: g.weapons.weapon.id,
                 shown: +shown.toFixed(2), actual: +actual.toFixed(2) };
@@ -319,7 +364,10 @@ const gear = await page.evaluate(async () => {
     const e = g.spawner.spawnAt('en_brute', g.player.x + Math.sin(a) * 2.4, g.player.z + Math.cos(a) * 2.4);
     if (e) { e.maxHp = e.hp = 8000; e.speed = 0; }
   }
-  await wait(2500);
+  await until(() => {
+    for (const e of g.enemies.list) if (e.active && e.burnT > 0) return true;
+    return false;
+  }, 4);
   let burning = 0, alive = 0;
   for (const e of g.enemies.list) if (e.active) { alive++; if (e.burnT > 0) burning++; }
   out.effects = { burning, alive, weapon: g.weapons.weapon.id, dmg: Math.round(g.combat.damageDealt) };
@@ -349,6 +397,18 @@ check(gear.effects.burning > 0, '武器の特殊効果が敵に乗る',
 const stage = await page.evaluate(async () => {
   const g = __DOPA.game;
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
   const out = {};
 
   // 解禁：最初は1しか遊べない
@@ -367,15 +427,20 @@ const stage = await page.evaluate(async () => {
   // 射撃敵の弾が飛ぶか。
   // ★敵弾の寿命は 射程/弾速 ＝ 1秒未満。一瞬だけ数えると見逃すので、
   //   窓の中を刻んで最大値を取る。
+  // ★射程の長い武器を装備していると、撃たれる前に撃ち殺してしまう。
+  //   敵の挙動だけを見たいので、近接武器に持ち替えてから置く。
+  g.equip('wp_iron_sword');
   g.spawner.spawnAt('en_stinger', g.player.x + 10, g.player.z);
+  // ★射撃間隔は最大2.2秒。しかもヘッドレスでは実時間より
+  //   ゲーム内時間の進みが遅い（描画が重く、1フレームあたりの進みが小さい）。
+  //   窓を実時間6秒取って、初弾を確実に捉える。成功したら即抜けるので通常は速い。
   let hostile = 0;
-  for (let i = 0; i < 30; i++) {
-    await wait(100);
+  await until(() => {
     let n = 0;
     for (const p of g.projectiles.list) if (p.active && p.hostile) n++;
     hostile = Math.max(hostile, n);
-    if (hostile > 0) break;
-  }
+    return hostile > 0;
+  }, 5);
   out.hostile = hostile;
 
   // 分裂：倒すと欠片が残る
@@ -387,7 +452,8 @@ const stage = await page.evaluate(async () => {
 
   // ボス出現 → HPバーと専用描画
   g.spawner.elapsed = 149.9;
-  await wait(900);
+  await until(() => !!g.enemies.findBoss(), 2);
+  await wait(150);
   const boss = g.enemies.findBoss();
   out.boss = boss ? { id: boss.arch.id, hp: Math.round(boss.hp),
                       bar: !document.getElementById('bossBar').hidden,
@@ -398,7 +464,7 @@ const stage = await page.evaluate(async () => {
   while (g.enemies.pool.free > 0) if (!g.spawner.spawnAt('en_slime', g.player.x + 20, g.player.z)) break;
   const free = g.enemies.pool.free;
   g.spawner.elapsed = 149.9;
-  await wait(900);
+  await until(() => !!g.enemies.findBoss(), 2);
   out.bossWhenFull = { free, spawned: !!g.enemies.findBoss() };
 
   // クリア → 報酬・解禁・記録
@@ -436,6 +502,18 @@ check(stage.clear.state === 'dead' && stage.clear.screen && stage.clear.marked &
 const metaRes = await page.evaluate(async () => {
   const g = __DOPA.game;
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
   const out = {};
 
   g.goHome();
@@ -521,6 +599,18 @@ check(metaRes.saved.atkUp > 0 && metaRes.saved.unlocks.includes('banner_prime') 
 const juice = await page.evaluate(async () => {
   const g = __DOPA.game;
   const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
   const out = {};
 
   // 命中でダメージ数字と火花が出るか
@@ -529,12 +619,11 @@ const juice = await page.evaluate(async () => {
   g.sparks.clear(); g.damageNumbers.clear();
   g.spawner.spawnBurst(20, g.player, 2.4);
   let dn = 0, sp = 0;
-  for (let i = 0; i < 25; i++) {
-    await wait(100);
+  await until(() => {
     dn = Math.max(dn, g.damageNumbers.count);
     sp = Math.max(sp, g.sparks.count);
-    if (dn > 0 && sp > 0) break;
-  }
+    return dn > 0 && sp > 0;
+  }, 4);
   out.vfx = { numbers: dn, sparks: sp, limit: g.damageNumbers.limit,
               outline: g.damageNumbers.outline, tier: g.quality.name };
 
@@ -590,6 +679,99 @@ check(pwa.name === 'DOPA ARENA' && pwa.display === 'fullscreen' && pwa.icons >= 
       'PWAマニフェストが正しい', `${pwa.name} / ${pwa.display} / アイコン${pwa.icons}`);
 check(pwa.missing.length === 0, 'Service Worker のプリキャッシュ一覧が全て実在する',
       `${pwa.listed} 件中 欠落 ${pwa.missing.length} 件${pwa.missing.length ? ': ' + pwa.missing.join(', ') : ''}`);
+
+// ---- キャラクター ----
+const chars = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ★実時間で待つと、機械の負荷次第で進むゲーム内時間が変わり検証が不安定になる。
+  //   「ゲーム内で何秒進んだか」で待つ。上限は実時間で切って無限待ちを防ぐ。
+  const waitGame = async (sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+  };
+  // 条件が立つまで待つ（立てば即抜ける）。ゲーム内時間と実時間の両方で上限を切る
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
+  const { CHARACTERS } = await import('/src/data/characters.js');
+  const out = {};
+
+  // 最初は既定の1人だけ
+  g.save.data.meta.unlocks = [];
+  g.save.data.meta.character = 'ch_vanguard';
+  out.locked = { available: g.meta.availableCharacters().length, total: CHARACTERS.length,
+                 current: g.meta.character.id };
+
+  // 未解放は選べない
+  out.rejected = g.selectCharacter('ch_bulwark') === false && g.meta.character.id === 'ch_vanguard';
+
+  // 実績で解放される
+  g.save.data.achievements = {};
+  g.save.data.stats.totalBosses = 1;
+  g.save.data.stats.bestRunLv = 20;
+  g.save.data.stats.ssrCount = 5;
+  g.meta.checkAchievements();
+  out.unlocked = { available: g.meta.availableCharacters().length,
+                   flags: g.save.data.meta.unlocks.filter(u => u.startsWith('char_')) };
+
+  // 選ぶとステータスが変わる
+  g.selectCharacter('ch_vanguard');
+  const a = { ...g.player.stats };
+  const okSelect = g.selectCharacter('ch_bulwark');
+  const b = { ...g.player.stats };
+  out.stats = { okSelect, current: g.meta.character.id,
+                hpBefore: +a.maxHpPct.toFixed(3), hpAfter: +b.maxHpPct.toFixed(3),
+                drBefore: +a.drAdd.toFixed(3), drAfter: +b.drAdd.toFixed(3) };
+
+  // ★得手不得手は「同じ武器を、別のキャラで持つ」で比べる。
+  //   武器を変えて比べると強化レベルや限界突破の差が混ざって判定にならない。
+  const { WEAPON_BY_ID } = await import('/src/data/weapons.js');
+  for (const id of ['wp_iron_sword', 'wp_short_bow']) {
+    if (!g.inventory.has(id)) g.inventory.grant(WEAPON_BY_ID.get(id), 'N');
+  }
+  g.startRun();
+  await wait(100);
+
+  const measure = (charId, weaponId) => {
+    g.selectCharacter(charId);
+    g.equip(weaponId);
+    return g.weapons.effectiveAtk(g.player);
+  };
+  out.affinity = {
+    // 射撃武器：レンジャー（射撃+18%）の方が高いはず
+    bowVanguard: +measure('ch_vanguard', 'wp_short_bow').toFixed(2),
+    bowRanger:   +measure('ch_ranger',   'wp_short_bow').toFixed(2),
+    // 近接武器：ヴァンガード（近接+12%）の方が高いはず
+    swordVanguard: +measure('ch_vanguard', 'wp_iron_sword').toFixed(2),
+    swordRanger:   +measure('ch_ranger',   'wp_iron_sword').toFixed(2),
+  };
+  g.selectCharacter('ch_ranger');
+
+  // 保存される
+  g.save.saveNow();
+  out.saved = JSON.parse(localStorage.getItem('dopa_arena_save')).meta.character;
+  return out;
+});
+
+check(chars.locked.available === 1 && chars.rejected,
+      '未解放のキャラは選べない',
+      `使用可 ${chars.locked.available}/${chars.locked.total}（既定 ${chars.locked.current}）`);
+check(chars.unlocked.available === 4 && chars.unlocked.flags.length === 3,
+      '実績でキャラが解放される',
+      `使用可 ${chars.unlocked.available} / 解放フラグ ${chars.unlocked.flags.join(',')}`);
+check(chars.stats.okSelect && chars.stats.hpAfter > chars.stats.hpBefore &&
+      chars.stats.drAfter > chars.stats.drBefore,
+      'キャラを選ぶとステータスが変わる',
+      `${chars.stats.current}: 最大HP +${(chars.stats.hpBefore * 100).toFixed(0)}%→+${(chars.stats.hpAfter * 100).toFixed(0)}% / 被ダメ軽減 ${(chars.stats.drBefore * 100).toFixed(0)}%→${(chars.stats.drAfter * 100).toFixed(0)}%`);
+check(chars.affinity.bowRanger > chars.affinity.bowVanguard &&
+      chars.affinity.swordVanguard > chars.affinity.swordRanger,
+      '武器の系統ごとに得手不得手が効く',
+      `弓: ヴァンガード ${chars.affinity.bowVanguard} < レンジャー ${chars.affinity.bowRanger} ／ ` +
+      `剣: レンジャー ${chars.affinity.swordRanger} < ヴァンガード ${chars.affinity.swordVanguard}`);
+check(chars.saved === 'ch_ranger', '選んだキャラがセーブに残る', chars.saved);
 
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);

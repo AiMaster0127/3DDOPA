@@ -39,6 +39,7 @@ export class Player {
     this.stats = {
       maxHpPct: 0, atkPct: 0, speedPct: 0,
       critAdd: 0, rateAdd: 0, pickupPct: 0, drAdd: 0,
+      meleeAtkPct: 0, rangedAtkPct: 0,
     };
   }
 

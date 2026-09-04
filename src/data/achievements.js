@@ -17,8 +17,11 @@ export const ACHIEVEMENTS = [
     check: s => s.stats.totalKills >= 10000,  reward: { gems: 1500, tickets: 5 } },
 
   // ---- ボス ----
+  // ★キャラ解放は「別々の遊び方」に紐づける。
+  //   同じ行動の延長で全部揃うと、キャラを増やした意味が薄れる。
   { id: 'boss_1',  name: '初討伐',   icon: '🏆', desc: 'ボスを1体撃破',
-    check: s => s.stats.totalBosses >= 1,   reward: { gems: 200, tickets: 1 } },
+    check: s => s.stats.totalBosses >= 1,   reward: { gems: 200, tickets: 1 },
+    unlock: 'char_ranger' },
   { id: 'boss_5',  name: '猛者',     icon: '🥇', desc: 'ボスを5体撃破',
     check: s => s.stats.totalBosses >= 5,   reward: { gems: 500, tickets: 2 } },
   { id: 'boss_20', name: '討伐王',   icon: '👑', desc: 'ボスを20体撃破',
@@ -38,7 +41,8 @@ export const ACHIEVEMENTS = [
   { id: 'runlv_10', name: '成長',   icon: '📈', desc: 'ラン中にLv.10へ到達',
     check: s => s.stats.bestRunLv >= 10, reward: { gems: 150 } },
   { id: 'runlv_20', name: '飛躍',   icon: '🚀', desc: 'ラン中にLv.20へ到達',
-    check: s => s.stats.bestRunLv >= 20, reward: { gems: 500, tickets: 1 } },
+    check: s => s.stats.bestRunLv >= 20, reward: { gems: 500, tickets: 1 },
+    unlock: 'char_bulwark' },
   { id: 'acct_10',  name: '歴戦',   icon: '🎖️', desc: 'アカウントLv.10に到達',
     check: s => s.meta.accountLv >= 10,  reward: { gems: 800, tickets: 2 } },
 
@@ -48,7 +52,8 @@ export const ACHIEVEMENTS = [
   { id: 'ssr_1',    name: '初SSR',  icon: '✨', desc: 'SSRを1本入手',
     check: s => s.stats.ssrCount >= 1,     reward: { gems: 300 } },
   { id: 'ssr_5',    name: '蒐集家', icon: '💎', desc: 'SSRを5本入手',
-    check: s => s.stats.ssrCount >= 5,     reward: { gems: 1000, tickets: 3 } },
+    check: s => s.stats.ssrCount >= 5,     reward: { gems: 1000, tickets: 3 },
+    unlock: 'char_arcanist' },
   { id: 'collect_10', name: '武器庫', icon: '🗃️', desc: '武器を10種類そろえる',
     check: s => Object.keys(s.inventory.weapons).length >= 10, reward: { gems: 500 } },
   { id: 'collect_all', name: '図鑑完成', icon: '📚', desc: '全ての武器をそろえる',

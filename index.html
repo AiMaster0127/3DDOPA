@@ -71,6 +71,7 @@
     <div class="home-main">
       <h1 class="home-title">DOPA<span>ARENA</span></h1>
       <p class="home-equip">装備中：<b id="hEquip">鉄の剣</b> <span id="hEquipAtk"></span></p>
+      <p class="home-equip">キャラ：<b id="hChar">ヴァンガード</b></p>
       <button id="btnSortie" class="home-btn primary">出撃<small id="hStage">ステージ1</small></button>
       <div class="home-row">
         <button id="btnStages" class="home-btn">ステージ選択</button>
@@ -78,10 +79,23 @@
         <button id="btnInv" class="home-btn">装備</button>
       </div>
       <div class="home-row">
+        <button id="btnChar" class="home-btn">キャラ選択</button>
         <button id="btnUpgrade" class="home-btn">拠点強化</button>
         <button id="btnAch" class="home-btn">実績<small id="hAch">0/0</small></button>
       </div>
       <p class="home-best" id="hBest"></p>
+    </div>
+  </div>
+
+  <!-- ===== キャラクター選択 ===== -->
+  <div id="chars" class="panel" hidden>
+    <header class="panel-top">
+      <button id="charBack" class="panel-back" type="button">← 戻る</button>
+      <div class="wallet"><span class="w-item" id="cProgress">0/0</span></div>
+    </header>
+    <div class="stage-body">
+      <p class="panel-lead">キャラごとに<b>得手不得手がはっきり違う</b>。装備の系統に合わせて選ぶ。</p>
+      <div class="char-list" id="charList"></div>
     </div>
   </div>
 

@@ -38,6 +38,7 @@ const PRECACHE = [
   './src/data/stages.js',
   './src/data/upgrades.js',
   './src/data/achievements.js',
+  './src/data/characters.js',
 
   './src/entities/Player.js',
   './src/entities/Enemy.js',
@@ -82,6 +83,7 @@ const PRECACHE = [
   './src/ui/InventoryUI.js',
   './src/ui/StageUI.js',
   './src/ui/MetaUI.js',
+  './src/ui/CharacterUI.js',
   './src/ui/share.js',
 
   './src/audio/AudioSystem.js',

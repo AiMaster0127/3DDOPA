@@ -22,6 +22,7 @@ export const INITIAL_SAVE = {
     unlocks: [],
     clearedStages: {},      // ステージID → true（初回クリア済み）
     lastStage: 1,           // 最後に選んだステージ
+    character: 'ch_vanguard',   // 選択中のキャラクター
   },
 
   wallet: { gems: 0, tickets: 3, dust: 0 },

@@ -123,7 +123,10 @@ export class Inventory {
 
   /**
    * 表示用の攻撃力（武器レベル成長 + 限界突破）。
-   * ★戦闘側の WeaponSystem.effectiveAtk と同じ式にすること。
+   *
+   * ★これは「武器そのものの強さ」。キャラクターの得手不得手やスキルの成長は含まない。
+   *   実戦値は WeaponSystem.effectiveAtk（= これ × キャラ補正 × 成長）。
+   *   武器同士を比べるための数字なので、ここに可変の補正を混ぜないこと。
    */
   atkOf(id) {
     const def = WEAPON_BY_ID.get(id);

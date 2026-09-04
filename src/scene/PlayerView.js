@@ -67,6 +67,10 @@ export class PlayerView {
 
     this.body.add(torso, core, head, nose, this.weaponPivot);
 
+    // キャラ切り替えで色を差し替えるために持っておく
+    this.coreMat = core.material;
+    this.noseMat = nose.material;
+
     // 影オフのティア用の簡易影。シャドウマップより桁違いに安い
     this.blob = new THREE.Mesh(
       new THREE.CircleGeometry(p.radius * 1.5, 18),
@@ -107,6 +111,22 @@ export class PlayerView {
 
     this._bob = 0;
     this._arcGeoKey = '';
+  }
+
+  /**
+   * キャラクターの配色を反映する。
+   * ★白い体は「床に溶けないこと」が目的なので、キャラで変えるのは
+   *   明度ではなく色味に留める。暗い体色にすると乱戦で自機を見失う。
+   */
+  setCharacter(character) {
+    const v = character.visual;
+    this.torsoMat.color.setHex(v.body);
+    this.coreMat.color.setHex(v.accent);
+    this.coreMat.emissive.setHex(v.accent);
+    this.noseMat.color.setHex(v.nose);
+    this.noseMat.emissive.setHex(v.nose);
+    this.aura.material.color.setHex(v.accent);
+    this.arcMat.color.setHex(v.accent);
   }
 
   /** 装備武器が変わったら見た目と斬撃範囲を作り直す（頻度が低いので毎回作ってよい）。 */

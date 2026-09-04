@@ -13,7 +13,8 @@ export class HomeUI {
    * @param {import('../save/SaveManager.js').SaveManager} o.save
    * @param {import('../progression/MetaSystem.js').MetaSystem} o.meta
    */
-  constructor({ inventory, save, meta, audio, onSortie, onGacha, onInventory, onStages, onUpgrade, onAchievements }) {
+  constructor({ inventory, save, meta, audio, onSortie, onGacha, onInventory, onStages,
+                onCharacters, onUpgrade, onAchievements }) {
     this.inv = inventory;
     this.save = save;
     this.meta = meta;
@@ -27,6 +28,7 @@ export class HomeUI {
     this.elEquip = document.getElementById('hEquip');
     this.elEquipAtk = document.getElementById('hEquipAtk');
     this.elBest = document.getElementById('hBest');
+    this.elChar = document.getElementById('hChar');
     this.elStage = document.getElementById('hStage');
     this.stage = null;
 
@@ -34,6 +36,7 @@ export class HomeUI {
     document.getElementById('btnGacha').addEventListener('click', onGacha);
     document.getElementById('btnInv').addEventListener('click', onInventory);
     document.getElementById('btnStages').addEventListener('click', onStages);
+    document.getElementById('btnChar').addEventListener('click', onCharacters);
     document.getElementById('btnUpgrade').addEventListener('click', onUpgrade);
     document.getElementById('btnAch').addEventListener('click', onAchievements);
     this.elAch = document.getElementById('hAch');
@@ -85,6 +88,9 @@ export class HomeUI {
     this.elTickets.textContent = w.tickets;
     this.elDust.textContent = w.dust;
     this.elAcct.textContent = `Lv.${this.meta.level}`;
+
+    const ch = this.meta.character;
+    this.elChar.textContent = `${ch.icon} ${ch.name}（${ch.tag}）`;
 
     const id = this.inv.equippedId;
     const def = WEAPON_BY_ID.get(id);
