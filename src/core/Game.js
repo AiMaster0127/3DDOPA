@@ -21,6 +21,9 @@ import { ProjectilePool } from '../entities/Projectile.js';
 import { PickupPool } from '../entities/Pickup.js';
 
 import { SaveManager } from '../save/SaveManager.js';
+import { Inventory } from '../gacha/Inventory.js';
+import { GachaSystem } from '../gacha/GachaSystem.js';
+import { GachaDirector } from '../gacha/GachaDirector.js';
 import { MetaSystem } from '../progression/MetaSystem.js';
 import { SkillSystem } from '../progression/SkillSystem.js';
 import { LevelSystem } from '../progression/LevelSystem.js';
@@ -35,10 +38,19 @@ import { Input } from '../ui/Input.js';
 import { Hud } from '../ui/Hud.js';
 import { Screens } from '../ui/Screens.js';
 import { LevelUpUI } from '../ui/LevelUpUI.js';
+import { HomeUI } from '../ui/HomeUI.js';
+import { GachaUI } from '../ui/GachaUI.js';
+import { InventoryUI } from '../ui/InventoryUI.js';
 
 import { SKILL_BY_ID } from '../data/skills.js';
+import { validateGacha } from '../data/gacha.js';
 
-export const STATE = { PLAYING: 'playing', LEVELUP: 'levelup', DEAD: 'dead' };
+export const STATE = {
+  HOME: 'home',           // 拠点。ガチャ・装備・出撃
+  PLAYING: 'playing',
+  LEVELUP: 'levelup',     // スキル3択。update を止める
+  DEAD: 'dead',
+};
 
 export class Game {
   /** @param {HTMLCanvasElement} canvas */
@@ -49,9 +61,14 @@ export class Game {
     this.events = new Events();
     this.rng = new RNG();
 
+    // ★確率テーブルの自己検証。データを壊したらここで気付ける
+    validateGacha();
+
     // ★セーブは最初に読む。永続強化がステータス計算の土台になる
     this.save = new SaveManager();
     this.meta = new MetaSystem(this.save);
+    this.inventory = new Inventory(this.save);
+    this.gacha = new GachaSystem({ save: this.save, inventory: this.inventory, rng: this.rng });
 
     // ---- 描画 ----
     this.scene = new SceneManager(canvas, TIERS[initialTier].aa);
@@ -75,6 +92,7 @@ export class Game {
     this.autoAim = new AutoAim(this.grid, this.enemies);
     this.weapons = new WeaponSystem({
       projectiles: this.projectiles, combat: this.combat, autoAim: this.autoAim,
+      inventory: this.inventory,
     });
     this.spawner = new SpawnDirector({
       enemies: this.enemies, rng: this.rng, arenaRadius: this.arena.radius,
@@ -100,8 +118,30 @@ export class Game {
       knob: document.getElementById('stickKnob'),
     });
     this.hud = new Hud();
-    this.screens = new Screens(() => this.startRun());
+    this.screens = new Screens(() => this.startRun(), () => this.goHome());
     this.levelUpUI = new LevelUpUI((id) => this._pickSkill(id));
+
+    // ---- 拠点・ガチャ・装備 ----
+    this.gachaDirector = new GachaDirector({
+      rng: this.rng,
+      onPhase: (phase, info) => this.gachaUI.onPhase(phase, info),
+    });
+    this.homeUI = new HomeUI({
+      inventory: this.inventory, save: this.save, meta: this.meta,
+      onSortie: () => this.startRun(),
+      onGacha: () => { this.homeUI.hide(); this.gachaUI.show(); },
+      onInventory: () => { this.homeUI.hide(); this.inventoryUI.show(); },
+    });
+    this.gachaUI = new GachaUI({
+      gacha: this.gacha, director: this.gachaDirector,
+      onBack: () => { this.gachaUI.hide(); this.homeUI.show(); },
+      onClosed: () => this.homeUI.refresh(),
+    });
+    this.inventoryUI = new InventoryUI({
+      inventory: this.inventory,
+      onEquip: (id) => this.equip(id),
+      onBack: () => { this.inventoryUI.hide(); this.homeUI.show(); },
+    });
 
     // 品質が変わったら描画側にまとめて反映する
     this.quality = new Quality((tier) => {
@@ -110,7 +150,7 @@ export class Game {
       this.instances.applyQuality(tier);
     }, initialTier);
 
-    this.state = STATE.PLAYING;
+    this.state = STATE.HOME;
     this.frame = 0;
     this.elapsed = 0;
     this.runGems = 0;
@@ -181,13 +221,34 @@ export class Game {
   }
 
   start() {
-    this.hud.show();
-    this.startRun();
     this.loop.start();
+    this.goHome();
+  }
+
+  /** 拠点へ。ランは止め、HUDを隠す。 */
+  goHome() {
+    this.state = STATE.HOME;
+    this.screens.hideGameOver();
+    this.levelUpUI.hide();
+    this.hud.hide();
+
+    // 拠点で装備を変えられるので、次の出撃に備えて敵を片付けておく
+    this.enemies.despawnAll();
+    this.projectiles.despawnAll();
+    this.pickups.despawnAll();
+    this.grid.clear();
+
+    this.homeUI.show();
   }
 
   /** ラン（1回の挑戦）を初期化する。死亡後の再挑戦もここを通る。 */
   startRun() {
+    this.homeUI.hide();
+    this.gachaUI.hide();
+    this.inventoryUI.hide();
+    this.screens.hideGameOver();
+    this.hud.show();
+
     this.state = STATE.PLAYING;
     this.elapsed = 0;
     this.frame = 0;
@@ -215,11 +276,13 @@ export class Game {
     this.events.emit(EV.RUN_STARTED);
   }
 
-  /** 装備変更。見た目と斬撃範囲も一緒に切り替える（フェーズ4のUIから呼ぶ）。 */
+  /** 装備変更。インベントリ（＝セーブ）と戦闘と見た目をまとめて切り替える。 */
   equip(weaponId) {
+    if (!this.inventory.equip(weaponId)) return false;
     if (!this.weapons.equip(weaponId)) return false;
     this.playerView.setWeapon(this.weapons.weapon);
     this.autoAim.reset();
+    this.homeUI.refresh();
     return true;
   }
 
@@ -259,7 +322,8 @@ export class Game {
     this.combat.resolveProjectiles();
     this.combat.resolveContact(this.player);
 
-    // 7. スキル（アクティブの発動）
+    // 7. 状態異常（炎上など）とスキル（アクティブの発動）
+    this.combat.tickStatuses(dt);
     this.skills.update(dt);
 
     // 8. 経験値の回収 → レベルアップ判定
@@ -272,6 +336,9 @@ export class Game {
 
   /** 毎フレームの描画。alpha は前フレームからの補間係数。 */
   render(alpha, dt) {
+    // 演出は実時間で進める（論理の固定ステップとは独立でよい）
+    if (this.gachaDirector.running) this.gachaDirector.update(dt);
+
     this.playerView.sync(this.player, alpha, dt);
     this.instances.sync(alpha);
     this.cameraRig.follow(this.player, dt);
@@ -280,6 +347,10 @@ export class Game {
     this.scene.render();
 
     this.quality.sample(dt);
+
+    // 拠点にいる間はHUDを更新しない（隠れているのでDOMを触るだけ無駄）
+    if (this.state === STATE.HOME) return;
+
     this.hud.syncHp(this.player.hp, this.player.maxHp);
     this.hud.syncLevel(this.levels.level, this.levels.xp01);
     this.hud.syncSkills(this._skillChips());

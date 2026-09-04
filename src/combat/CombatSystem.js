@@ -83,6 +83,81 @@ export class CombatSystem {
     return false;
   }
 
+  /**
+   * 武器の特殊効果を適用する。
+   *
+   * ★命中の瞬間に1回だけ呼ぶ。継続ダメージ自体は tickStatuses が処理する。
+   * @param {Array} effects data/weapons.js の effects
+   * @param {number} damage この一撃で与えたダメージ（割合系の基準になる）
+   */
+  applyEffects(effects, e, damage) {
+    if (!effects || effects.length === 0) return;
+
+    for (let i = 0; i < effects.length; i++) {
+      const ef = effects[i];
+      // 倒した相手に継続効果を乗せても意味がない。爆発だけは死体を起点にしてよい
+      if (e.dead && ef.id !== 'explode') continue;
+      if (this.rng.next() >= ef.chance) continue;
+
+      if (ef.id === 'burn') {
+        // 強い方で上書きする。弱い炎で強い炎を消させない
+        const dps = damage * ef.power;
+        if (dps >= e.burnDps || e.burnT <= 0) { e.burnDps = dps; e.burnT = ef.dur; }
+        else e.burnT = Math.max(e.burnT, ef.dur);
+
+      } else if (ef.id === 'freeze') {
+        if (ef.power >= e.slowMul || e.slowT <= 0) { e.slowMul = ef.power; e.slowT = ef.dur; }
+        else e.slowT = Math.max(e.slowT, ef.dur);
+
+      } else if (ef.id === 'explode') {
+        this._explode(e.x, e.z, ef.radius, damage * ef.power, e);
+
+      } else {
+        console.warn(`未実装の効果: ${ef.id}`);
+      }
+    }
+  }
+
+  /** 爆発。起点の敵自身には二重に入れない。 */
+  _explode(x, z, radius, damage, source) {
+    const list = this.enemies.list;
+    const n = this.grid.query(x, z, radius + 1.0);
+    const res = this.grid.result;
+    const dmg = Math.max(1, Math.floor(damage));
+
+    for (let k = 0; k < n; k++) {
+      const o = list[res[k]];
+      if (!o.active || o.dead || o === source) continue;
+      const dx = o.x - x, dz = o.z - z;
+      const r = radius + o.radius;
+      if (dx * dx + dz * dz > r * r) continue;
+      this.hitEnemy(o, dmg, false, x, z, 0.35);
+    }
+  }
+
+  /**
+   * 継続ダメージの処理。毎フレーム呼ぶ。
+   * ★撃破の扱いを1箇所に集めたいので、burn の判定も hitEnemy を通す。
+   */
+  tickStatuses(dt) {
+    const list = this.enemies.list;
+    for (let i = 0; i < this.enemies.cap; i++) {
+      const e = list[i];
+      if (!e.active || e.burnT <= 0) continue;
+
+      e.burnT -= dt;
+      e.tickAcc += e.burnDps * dt;
+
+      // 1以上たまったぶんだけ整数で入れる。端数は持ち越す
+      if (e.tickAcc >= 1) {
+        const dmg = Math.floor(e.tickAcc);
+        e.tickAcc -= dmg;
+        this.hitEnemy(e, dmg, false, e.x, e.z, 0);
+      }
+      if (e.burnT <= 0) { e.burnDps = 0; e.tickAcc = 0; }
+    }
+  }
+
   /** 弾 × 敵。貫通弾は同じ敵に二度当たらないよう hitMask で記録する。 */
   resolveProjectiles() {
     const projs = this.projectiles;
@@ -106,7 +181,10 @@ export class CombatSystem {
 
         p.hitMask.add(idx);
         const { amount, isCrit } = this.computeDamage(p.damage, p.crit, p.critDmg, p.element, e);
-        this.hitEnemy(e, amount, isCrit, p.px, p.pz, p.knock);
+        const killed = this.hitEnemy(e, amount, isCrit, p.px, p.pz, p.knock);
+        // ★倒した相手にも効果は乗せる（爆発は死体を起点に広がってよい）
+        if (p.effects) this.applyEffects(p.effects, e, amount);
+        void killed;
 
         if (--p.pierce < 0) { projs.despawn(p); break; }
       }
@@ -118,6 +196,7 @@ export class CombatSystem {
    * @returns {number} 当てた数
    */
   resolveMeleeArc(player, weapon, atk, critRate, critDmg, element) {
+    const effects = weapon.effects;
     const a = weapon.attack;
     const range = weapon.base.range;
     const halfArc = (a.arcDeg * Math.PI) / 360;      // 度→ラジアンの半角
@@ -143,6 +222,7 @@ export class CombatSystem {
 
       const { amount, isCrit } = this.computeDamage(atk, critRate, critDmg, element, e);
       this.hitEnemy(e, amount, isCrit, player.x, player.z, weapon.base.knock);
+      if (effects) this.applyEffects(effects, e, amount);
       hits++;
     }
     return hits;

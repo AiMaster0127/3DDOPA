@@ -3,8 +3,11 @@
  * リザルトの作り込みと共有ボタンはフェーズ7。ここでは最低限の表示と再挑戦だけ。
  */
 export class Screens {
-  /** @param {() => void} onRetry */
-  constructor(onRetry) {
+  /**
+   * @param {() => void} onRetry
+   * @param {() => void} onHome
+   */
+  constructor(onRetry, onHome) {
     this.over = document.getElementById('over');
     this.ovTime = document.getElementById('ovTime');
     this.ovKills = document.getElementById('ovKills');
@@ -17,6 +20,10 @@ export class Screens {
     document.getElementById('retryBtn').addEventListener('click', () => {
       this.hideGameOver();
       onRetry();
+    });
+    document.getElementById('homeBtn').addEventListener('click', () => {
+      this.hideGameOver();
+      onHome();
     });
   }
 

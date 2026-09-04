@@ -54,7 +54,10 @@ check(bootMsg === 'READY', '起動', bootMsg);
 if (bootMsg !== 'READY') { console.log(errors.join('\n') || logs.join('\n')); await browser.close(); process.exit(1); }
 
 await page.click('#startBtn');
-await page.waitForTimeout(1000);
+await page.waitForTimeout(300);
+// ★フェーズ4以降、起動直後は拠点(HOME)。操作の検証には出撃が要る
+await page.evaluate(() => __DOPA.game.startRun());
+await page.waitForTimeout(700);
 
 // ---- 移動：入力で自機が動くか ----
 const before = await page.evaluate(() => ({ x: __DOPA.game.player.x, z: __DOPA.game.player.z }));
@@ -110,17 +113,21 @@ const fight = await page.evaluate(async () => {
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const out = {};
 
-  const trial = async (weaponId, dist, ms) => {
+  const trial = async (weaponId, dist, ms, count) => {
     g.startRun();
     g.equip(weaponId);
     g.player.takeDamage = () => false;              // 攻撃性能だけを見たいので不死にする
-    const placed = g.spawner.spawnBurst(24, g.player, dist);
+    const placed = g.spawner.spawnBurst(count, g.player, dist);
     await wait(ms);
     return { placed, kills: g.combat.kills, dmg: Math.round(g.combat.damageDealt) };
   };
 
-  out.melee = await trial('wp_iron_sword', 2.6, 4000);
-  out.ranged = await trial('wp_short_bow', 8.0, 4000);
+  // 近接は扇の中の全員に当たるので密集させる。
+  // ★射撃は貫通でダメージが分散するため、等距離に大量に置くと
+  //   総ダメージは出るのに1体も落ちない、という紛れが起きる。
+  //   「倒せるか」を見たいので的を絞る。
+  out.melee = await trial('wp_iron_sword', 2.6, 4000, 24);
+  out.ranged = await trial('wp_short_bow', 8.0, 5000, 8);
 
   // 敵同士が団子にならないか
   g.startRun();
@@ -251,6 +258,92 @@ check(afterReload.lv === beforeReload.lv && afterReload.gems === beforeReload.ge
       afterReload.lv > 1,
       'リロードしても永続進行が残る',
       `Lv.${beforeReload.lv}→Lv.${afterReload.lv} / ジェム ${afterReload.gems} / 累計ラン ${afterReload.runs} / 永続攻撃補正 +${(afterReload.bonusAtk * 100).toFixed(1)}%`);
+
+// ---- ガチャ・装備（フェーズ4） ----
+const gear = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = {};
+
+  // 拠点に戻れるか
+  g.goHome();
+  await wait(150);
+  out.home = { state: g.state, visible: !document.getElementById('home').hidden,
+               hudHidden: document.getElementById('hud').hidden };
+
+  // 引ける → 所持が増える → 保存される
+  g.save.data.wallet.gems = 50000;
+  const owned0 = Object.keys(g.inventory.owned).length;
+  const gems0 = g.save.data.wallet.gems;
+  g.gachaDirector.close();
+  const res = g.gacha.pullTen();
+  out.pull = { owned0, owned1: Object.keys(g.inventory.owned).length,
+               got: res.length, spent: gems0 - g.save.data.wallet.gems,
+               persisted: JSON.parse(localStorage.getItem('dopa_arena_save')).gacha.totalPulls };
+
+  // ダブり → かけら → 限界突破
+  const anyId = Object.keys(g.inventory.owned)[0];
+  const own = g.inventory.entry(anyId);
+  own.shards = 99;
+  const lb0 = own.lb;
+  const okLb = g.inventory.limitBreak(anyId);
+  out.lb = { id: anyId, lb0, lb1: own.lb, ok: okLb, shardsLeft: own.shards };
+
+  // 強化 → 攻撃力が上がる
+  g.save.data.wallet.dust = 99999;
+  const atk0 = g.inventory.atkOf(anyId);
+  g.inventory.enhance(anyId);
+  out.enh = { atk0: +atk0.toFixed(1), atk1: +g.inventory.atkOf(anyId).toFixed(1) };
+
+  // 装備すると戦闘の攻撃力に反映される（表示と実戦力が一致するか）
+  const strongest = g.inventory.list()[0];
+  g.equip(strongest.id);
+  g.startRun();
+  await wait(120);
+  const shown = g.inventory.atkOf(strongest.id);
+  const actual = g.weapons.effectiveAtk({ stats: { atkPct: 0 } });
+  out.equip = { id: strongest.id, equipped: g.inventory.equippedId,
+                weapon: g.weapons.weapon.id,
+                shown: +shown.toFixed(2), actual: +actual.toFixed(2) };
+
+  // 特殊効果（炎上・凍結）が敵に乗るか
+  // ★一撃で倒せる敵だと、炎上が乗る前に消えて検証にならない。
+  //   硬くして動かない敵を並べ、効果が「生きている敵に乗る」ことを見る。
+  const { WEAPON_BY_ID } = await import('/src/data/weapons.js');
+  if (!g.inventory.has('wp_flare_blade')) g.inventory.grant(WEAPON_BY_ID.get('wp_flare_blade'), 'SSR');
+  g.startRun();
+  g.player.takeDamage = () => false;
+  g.equip('wp_flare_blade');                 // 炎上40% / 爆発18%
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const e = g.spawner.spawnAt('en_brute', g.player.x + Math.sin(a) * 2.4, g.player.z + Math.cos(a) * 2.4);
+    if (e) { e.maxHp = e.hp = 8000; e.speed = 0; }
+  }
+  await wait(2500);
+  let burning = 0, alive = 0;
+  for (const e of g.enemies.list) if (e.active) { alive++; if (e.burnT > 0) burning++; }
+  out.effects = { burning, alive, weapon: g.weapons.weapon.id, dmg: Math.round(g.combat.damageDealt) };
+  return out;
+});
+
+check(gear.home.state === 'home' && gear.home.visible && gear.home.hudHidden,
+      '拠点に戻れる', `state=${gear.home.state}`);
+check(gear.pull.owned1 > gear.pull.owned0 && gear.pull.got === 10 && gear.pull.spent === 1000,
+      '10連で武器が増え通貨が減る',
+      `所持 ${gear.pull.owned0}→${gear.pull.owned1} / 消費 💎${gear.pull.spent}`);
+check(gear.pull.persisted > 0, 'ガチャ結果が即座に保存される',
+      `localStorage の累計 ${gear.pull.persisted} 回`);
+check(gear.lb.ok && gear.lb.lb1 > gear.lb.lb0,
+      'ダブりのかけらで限界突破できる',
+      `${gear.lb.id}: 限界突破 ${gear.lb.lb0}→${gear.lb.lb1} / 残りかけら ${gear.lb.shardsLeft}`);
+check(gear.enh.atk1 > gear.enh.atk0, '強化粉で武器を強化できる',
+      `攻撃力 ${gear.enh.atk0} → ${gear.enh.atk1}`);
+check(gear.equip.equipped === gear.equip.id && gear.equip.weapon === gear.equip.id &&
+      Math.abs(gear.equip.shown - gear.equip.actual) < 0.01,
+      '装備が戦闘に反映され、表示攻撃力と一致する',
+      `${gear.equip.id} 表示 ${gear.equip.shown} / 実戦 ${gear.equip.actual}`);
+check(gear.effects.burning > 0, '武器の特殊効果が敵に乗る',
+      `${gear.effects.weapon}: 生存 ${gear.effects.alive} 体中 炎上中 ${gear.effects.burning} 体 / 総ダメージ ${gear.effects.dmg}`);
 
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);

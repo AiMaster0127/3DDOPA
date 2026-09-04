@@ -25,6 +25,11 @@ function makeEnemy() {
 
     flash: 0,            // 被弾フラッシュ（1→0）
     contactCd: 0,        // 接触ダメージのクールダウン
+
+    // 状態異常（武器の特殊効果）
+    burnT: 0, burnDps: 0,      // 継続ダメージ
+    slowT: 0, slowMul: 0,      // 減速（0.4 = 40%遅く）
+    tickAcc: 0,                // 継続ダメージの端数
     aiTimer: 0,          // AIごとの自由な位相
     aiSide: 1,           // 回り込み方向
     dead: false,
@@ -61,6 +66,9 @@ export class EnemyPool {
     e.radius = arch.radius;
     e.flash = 0;
     e.contactCd = 0;
+    e.burnT = 0; e.burnDps = 0;
+    e.slowT = 0; e.slowMul = 0;
+    e.tickAcc = 0;
     e.aiTimer = Math.random() * 6.28;
     e.aiSide = Math.random() < 0.5 ? -1 : 1;
     e.dead = false;
@@ -91,10 +99,13 @@ export class EnemyPool {
       if (((i + frame) & 3) === 0) AI[e.arch.ai](e, player, dt * 4);
       e.aiTimer += dt;
 
-      // 移動 = AI速度 + ノックバック
-      e.x += (e.vx + e.kx) * dt;
-      e.z += (e.vz + e.kz) * dt;
+      // 移動 = AI速度（減速を掛ける）+ ノックバック（減速の影響を受けない）
+      const slow = e.slowT > 0 ? 1 - e.slowMul : 1;
+      e.x += (e.vx * slow + e.kx) * dt;
+      e.z += (e.vz * slow + e.kz) * dt;
       e.kx *= kDecay; e.kz *= kDecay;
+
+      if (e.slowT > 0) e.slowT -= dt;
 
       // 向きは移動方向。止まっているときは前の向きを保つ
       if (e.vx || e.vz) e.facing = Math.atan2(e.vx, e.vz);

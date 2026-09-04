@@ -35,6 +35,8 @@ export class Hud {
 
   show() { this.root.hidden = false; }
 
+  hide() { this.root.hidden = true; }
+
   /** 入力があったらチュートリアル文言を1度だけ消す */
   dismissHint() {
     if (this._hintHidden) return;

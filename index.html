@@ -42,6 +42,92 @@
     </div>
   </div>
 
+  <!-- ===== 拠点（ホーム） ===== -->
+  <div id="home" class="home" hidden>
+    <header class="home-top">
+      <div class="wallet">
+        <span class="w-item" title="ジェム">💎 <b id="wGems">0</b></span>
+        <span class="w-item" title="チケット">🎟 <b id="wTickets">0</b></span>
+        <span class="w-item" title="強化粉">✨ <b id="wDust">0</b></span>
+      </div>
+      <div class="home-acct">アカウント <b id="hAcct">Lv.1</b></div>
+    </header>
+
+    <div class="home-main">
+      <h1 class="home-title">DOPA<span>ARENA</span></h1>
+      <p class="home-equip">装備中：<b id="hEquip">鉄の剣</b> <span id="hEquipAtk"></span></p>
+      <button id="btnSortie" class="home-btn primary">出撃</button>
+      <div class="home-row">
+        <button id="btnGacha" class="home-btn">ガチャ</button>
+        <button id="btnInv" class="home-btn">装備</button>
+      </div>
+      <p class="home-best" id="hBest"></p>
+    </div>
+  </div>
+
+  <!-- ===== ガチャ ===== -->
+  <div id="gacha" class="panel" hidden>
+    <header class="panel-top">
+      <button id="gachaBack" class="panel-back" type="button">← 戻る</button>
+      <div class="wallet">
+        <span class="w-item">💎 <b id="gGems">0</b></span>
+        <span class="w-item">🎟 <b id="gTickets">0</b></span>
+      </div>
+    </header>
+
+    <div class="gacha-body">
+      <h2 class="gacha-name" id="gBannerName">スタンダード</h2>
+      <p class="gacha-pickup">ピックアップ：<b id="gFeatured">—</b></p>
+
+      <table class="rate-table">
+        <caption>排出確率（<code>src/data/gacha.js</code> で編集できる）</caption>
+        <tbody id="gRates"></tbody>
+      </table>
+
+      <p class="gacha-pity" id="gPity"></p>
+
+      <div class="gacha-actions">
+        <button id="btnPull1" class="home-btn">単発<small id="gCost1">💎100</small></button>
+        <button id="btnPull10" class="home-btn primary">10連<small id="gCost10">💎1000</small></button>
+      </div>
+      <p class="gacha-note">課金要素はありません。通貨はプレイ報酬のみです。</p>
+    </div>
+  </div>
+
+  <!-- ===== ガチャ演出 ===== -->
+  <div id="reveal" class="reveal" hidden>
+    <div id="revealStage" class="reveal-stage">
+      <div id="revealOmen" class="omen"></div>
+      <div id="revealCard" class="reveal-card" hidden>
+        <span class="rc-rarity" id="rcRarity">SSR</span>
+        <span class="rc-name" id="rcName"></span>
+        <span class="rc-sub" id="rcSub"></span>
+      </div>
+    </div>
+    <p class="reveal-skip" id="revealSkip">タップでスキップ</p>
+
+    <div id="revealSummary" class="reveal-summary" hidden>
+      <h3>結果</h3>
+      <div class="summary-grid" id="summaryGrid"></div>
+      <button id="revealClose" class="home-btn primary">閉じる</button>
+    </div>
+  </div>
+
+  <!-- ===== 装備・インベントリ ===== -->
+  <div id="inv" class="panel" hidden>
+    <header class="panel-top">
+      <button id="invBack" class="panel-back" type="button">← 戻る</button>
+      <div class="wallet">
+        <span class="w-item">✨ <b id="iDust">0</b></span>
+        <span class="w-item" id="iCollection">図鑑 0/0</span>
+      </div>
+    </header>
+    <div class="inv-body">
+      <div class="inv-list" id="invList"></div>
+      <aside class="inv-detail" id="invDetail"></aside>
+    </div>
+  </div>
+
   <!-- ===== レベルアップ：スキル3択 ===== -->
   <div id="levelup" class="levelup" hidden>
     <p class="lv-kicker">LEVEL UP</p>
@@ -62,7 +148,10 @@
       <p>永続経験値 <b id="ovXp">+0</b></p>
       <p id="ovLevelUp" class="over-levelup" hidden>アカウントレベルが <b id="ovAcct">2</b> に上がった！</p>
     </div>
-    <button id="retryBtn" class="boot-btn">もう一度</button>
+    <div class="over-actions">
+      <button id="retryBtn" class="boot-btn">もう一度</button>
+      <button id="homeBtn" class="home-btn">拠点へ戻る</button>
+    </div>
   </div>
 
   <!-- ===== 仮想スティック（タッチ時のみ表示） ===== -->
@@ -76,7 +165,7 @@
     <h1 class="boot-title">DOPA<span>ARENA</span></h1>
     <p class="boot-sub">PHASE 1 — 動く3D</p>
     <p id="bootMsg" class="boot-msg">読み込み中…</p>
-    <button id="startBtn" class="boot-btn" hidden>ARENA へ</button>
+    <button id="startBtn" class="boot-btn" hidden>はじめる</button>
   </div>
 
   <script type="module" src="./src/main.js"></script>

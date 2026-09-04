@@ -17,6 +17,7 @@ function makeProjectile() {
     life: 0,
     damage: 0, crit: 0, critDmg: 0, knock: 0,
     element: 'none',
+    effects: null,       // 武器の特殊効果（参照を持つだけ。中身は書き換えない）
     pierce: 0,
     visualIndex: 0,      // InstancedMesh の添字（弾の見た目の種類）
     hitMask: null,       // 貫通中に同じ敵へ二重ヒットしないための記録
@@ -50,6 +51,7 @@ export class ProjectilePool {
     p.critDmg = opts.critDmg;
     p.knock = opts.knock;
     p.element = opts.element;
+    p.effects = opts.effects || null;
     p.pierce = opts.pierce;
     p.visualIndex = opts.visualIndex | 0;
     p.hitMask.clear();

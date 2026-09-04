@@ -5,19 +5,25 @@
  * 攻撃の実行だけを行う。武器が増えても、attack.kind の分岐を1つ足すだけで済む。
  */
 import { WEAPON_BY_ID, STARTER_WEAPON } from '../data/weapons.js';
+import { GACHA } from '../data/gacha.js';
 
 export class WeaponSystem {
-  constructor({ projectiles, combat, autoAim }) {
+  /**
+   * @param {object} o
+   * @param {import('../gacha/Inventory.js').Inventory} o.inventory
+   *   武器レベルと限界突破の実体はインベントリ（＝セーブ）にある。
+   *   ここで二重に持つと、強化した直後に戦闘へ反映されない事故が起きる。
+   */
+  constructor({ projectiles, combat, autoAim, inventory }) {
     this.projectiles = projectiles;
     this.combat = combat;
     this.autoAim = autoAim;
+    this.inventory = inventory;
 
     this.weapon = null;
-    this.level = 1;              // 武器レベル（フェーズ4の強化で使う）
-    this.limitBreak = 0;         // 限界突破段階（同上）
     this.cooldown = 0;
 
-    this.equip(STARTER_WEAPON);
+    this.equip(inventory ? inventory.equippedId : STARTER_WEAPON);
   }
 
   equip(id) {
@@ -28,13 +34,26 @@ export class WeaponSystem {
     return true;
   }
 
-  reset() { this.cooldown = 0; }
+  reset() {
+    // 拠点で装備を変えていた場合に備え、ラン開始時に読み直す
+    if (this.inventory) this.equip(this.inventory.equippedId);
+    this.cooldown = 0;
+  }
 
-  /** 武器レベル・限界突破・キャラ倍率を乗せた最終攻撃力。 */
+  /** 所持データ（強化レベル・限界突破）。未所持なら素の状態として扱う。 */
+  get own() {
+    return (this.inventory && this.inventory.entry(this.weapon.id)) || { lv: 1, lb: 0 };
+  }
+
+  /**
+   * 武器レベル・限界突破・キャラ倍率を乗せた最終攻撃力。
+   * ★Inventory.atkOf と同じ式にすること（UIの表示と実戦力がズレないように）。
+   */
   effectiveAtk(player) {
     const w = this.weapon;
-    const base = w.base.atk + w.growth.atk * (this.level - 1);
-    return base * (1 + 0.08 * this.limitBreak) * (1 + player.stats.atkPct);
+    const own = this.own;
+    const base = w.base.atk + w.growth.atk * (own.lv - 1);
+    return base * (1 + GACHA.limitBreak.atkPerLB * own.lb) * (1 + player.stats.atkPct);
   }
 
   get range() { return this.weapon.base.range; }
@@ -94,7 +113,8 @@ export class WeaponSystem {
         {
           radius: a.radius, life: a.life,
           damage: atk, crit, critDmg, knock: w.base.knock,
-          element: w.element, pierce: a.pierce, visualIndex: 0,
+          element: w.element, effects: w.effects,
+          pierce: a.pierce, visualIndex: 0,
         }
       );
     }
