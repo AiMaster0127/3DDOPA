@@ -3,7 +3,7 @@
 three.js 製の 3DアクションRPG（アリーナ型ハクスラ）。
 **3D描画 × レベル上げ × ガチャ** の3軸で「装備を引く → 強くなる → 上の敵に挑む」を回す収集・育成ゲーム。
 
-> **現在の進捗：フェーズ0（技術設計）完了 / フェーズ1 着手待ち**
+> **現在の進捗：フェーズ1（動く3D）完了 / フェーズ2（戦闘コア）着手待ち**
 > 設計の全文は **[docs/PHASE0_DESIGN.md](docs/PHASE0_DESIGN.md)** を参照。
 
 ---
@@ -15,6 +15,30 @@ three.js 製の 3DアクションRPG（アリーナ型ハクスラ）。
 - **課金要素なし**：ガチャ通貨はプレイ報酬のみ。排出確率はデータで公開・改変可能。
 - **60fps 死守**：InstancedMesh + オブジェクトプールで、敵200体でもフレームを落とさない。
 - **スマホ/PC 両対応**：仮想スティック＋オートエイム / WASD＋マウス。
+
+---
+
+## 実装済みの範囲（フェーズ1）
+
+3Dアリーナに自機を置いて動かすところまで。**戦闘・敵・ガチャはまだ入っていない。**
+
+- 円形アリーナ（地面グリッド・外周ブロック・散乱する装飾）
+- 自機の移動（加速・減速・向きの追従・壁でのクランプ）
+- カメラ追従（進行方向の先読み・注視点の遅延・シェイク用API）
+- 仮想スティック（触れた位置に出現）／ WASD・矢印キー
+- 適応品質（高／中／低の自動切替。低ティアでは実影を簡易影に置換）
+- 縦持ち補正（垂直FOVを広げて水平視界の潰れを抑える）
+- HUD（FPS／品質ティア／draw call）
+
+### 検証結果
+
+| 項目 | 実測 |
+|---|---|
+| draw call | 13〜17（予算100） |
+| 三角形数 | 2,286〜4,068（予算60,000） |
+| JSフレームコスト | 0.001 ms（予算4 ms） |
+| 600フレームのヒープ増加 | **0.0 KB**（ループ内アロケーションなし） |
+| 対応ビューポート | 1280x800 ／ 390x844（縦） ／ 844x390（横） |
 
 ---
 
@@ -30,6 +54,18 @@ npx serve -l 8080
 ```
 
 → ブラウザで `http://localhost:8080` を開く。
+
+### 開発ツール（ゲーム本体には含まれない）
+
+ブラウザ実機での回帰確認用。**ゲームの配信物は three.js 以外に依存しない。**
+`package.json` の devDependencies（Playwright）はこのツール専用。
+
+```bash
+npm install          # Playwright のみ
+npm run serve        # 別ターミナルで起動しておく
+npm run smoke        # 起動・移動・壁・draw call・HUD・コンソール汚染を3ビューポートで確認
+npm run perf         # JSフレームコストとループ内アロケーションを計測
+```
 
 ---
 
@@ -47,7 +83,7 @@ src/
 ├── save/         localStorage 永続化・バージョン管理
 ├── ui/           HUD・各画面・入力の正規化
 └── audio/        Web Audio による音の合成
-vendor/three/     three.js r160.1（MIT）を同梱
+vendor/three/     three.js r185.1（MIT）を同梱（module + core の2ファイル）
 ```
 
 **依存の向きは一方通行**：`data/` `core/` ← ロジック層 ← `scene/` ← `ui/`。
@@ -102,8 +138,8 @@ vendor/three/     three.js r160.1（MIT）を同梱
 **`src/data/gacha.js` の1箇所のみ**。他のどこにも確率は書かない。
 
 ```js
-baseRates: { N: 0.550, R: 0.320, SR: 0.105, SSR: 0.025 },
-pity: { softStart: 70, softAdd: 0.025, hard: 100, tenPullFloor: 'SR' },
+baseRates: { N: 0.530, R: 0.320, SR: 0.110, SSR: 0.040 },
+pity: { softStart: 50, softAdd: 0.050, hard: 70, tenPullFloor: 'SR' },
 ```
 
 起動時に `validateGacha()` が合計値 1.0 を検証する（ズレていればコンソールに警告）。
@@ -176,4 +212,4 @@ pity: { softStart: 70, softAdd: 0.025, hard: 100, tenPullFloor: 'SR' },
 ## ライセンス
 
 - 本ゲーム本体：このリポジトリの規定に従う
-- [three.js](https://threejs.org/) r160.1 — MIT License（`vendor/three/LICENSE`）
+- [three.js](https://threejs.org/) r185.1 — MIT License（`vendor/three/LICENSE`）

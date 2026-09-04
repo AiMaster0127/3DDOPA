@@ -1,0 +1,112 @@
+/* DOPA ARENA — UI レイヤ。3D描画は canvas、UIは通常のDOM。 */
+
+:root {
+  --bg:      #0a0a12;
+  --ink:     #e8ecff;
+  --dim:     #7c85b0;
+  --accent:  #43e8ff;
+  --accent2: #ff3ea5;
+  --panel:   rgba(12, 14, 30, 0.62);
+  --stroke:  rgba(120, 150, 255, 0.22);
+  --safe-b:  env(safe-area-inset-bottom, 0px);
+  --safe-t:  env(safe-area-inset-top, 0px);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  /* ゲーム中のスクロール・ズーム・長押し選択を全面的に殺す */
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#gl { display: block; width: 100%; height: 100%; }
+
+/* ===== HUD ===== */
+.hud {
+  position: fixed; inset: 0;
+  pointer-events: none;             /* 入力は canvas に素通しする */
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: calc(10px + var(--safe-t)) 12px calc(10px + var(--safe-b));
+}
+.hud[hidden] { display: none; }
+
+.stat-panel {
+  display: inline-flex; gap: 14px; align-items: flex-end;
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 6px 12px;
+  backdrop-filter: blur(6px);
+  font-variant-numeric: tabular-nums;
+}
+.stat { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.stat b { font-size: 15px; font-weight: 700; color: var(--accent); }
+.stat i { font-size: 9px; font-style: normal; color: var(--dim); letter-spacing: .08em; }
+
+.hud-bottom { display: flex; justify-content: center; }
+.hint {
+  font-size: 11px; color: var(--dim);
+  background: var(--panel); border: 1px solid var(--stroke);
+  border-radius: 999px; padding: 5px 14px;
+  transition: opacity .6s ease;
+}
+.hint.fade { opacity: 0; }
+
+/* ===== 仮想スティック ===== */
+.stick { position: fixed; left: 0; top: 0; pointer-events: none; z-index: 5; }
+.stick[hidden] { display: none; }
+.stick-base, .stick-knob {
+  position: absolute; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  left: 0; top: 0;
+}
+.stick-base {
+  width: 118px; height: 118px;
+  border: 2px solid rgba(67, 232, 255, .30);
+  background: radial-gradient(circle, rgba(67,232,255,.10) 0%, rgba(67,232,255,0) 70%);
+}
+.stick-knob {
+  width: 52px; height: 52px;
+  background: radial-gradient(circle at 35% 30%, #7ff4ff, #1590b8);
+  box-shadow: 0 0 18px rgba(67, 232, 255, .55);
+}
+
+/* ===== 起動画面 ===== */
+.boot {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: radial-gradient(ellipse at 50% 40%, #16173a 0%, var(--bg) 70%);
+  transition: opacity .45s ease;
+}
+.boot.gone { opacity: 0; pointer-events: none; }
+
+.boot-title {
+  font-size: clamp(38px, 12vw, 86px);
+  font-weight: 900; letter-spacing: .04em; line-height: .95;
+  color: var(--ink);
+  text-shadow: 0 0 28px rgba(67, 232, 255, .45);
+}
+.boot-title span { display: block; color: var(--accent2); text-shadow: 0 0 28px rgba(255, 62, 165, .5); }
+.boot-sub { font-size: 12px; letter-spacing: .3em; color: var(--dim); }
+.boot-msg { font-size: 12px; color: var(--dim); min-height: 1.2em; }
+.boot-msg.error { color: #ff6b6b; max-width: 30em; text-align: center; line-height: 1.7; white-space: pre-line; }
+
+.boot-btn {
+  margin-top: 8px; padding: 13px 40px;
+  font: inherit; font-size: 16px; font-weight: 700; letter-spacing: .12em;
+  color: #04121a; cursor: pointer;
+  background: linear-gradient(135deg, #43e8ff, #b06bff);
+  border: 0; border-radius: 999px;
+  box-shadow: 0 0 26px rgba(67, 232, 255, .45);
+}
+.boot-btn[hidden] { display: none; }
+.boot-btn:active { transform: scale(.96); }

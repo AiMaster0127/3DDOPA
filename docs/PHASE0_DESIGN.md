@@ -9,28 +9,36 @@
 
 | 項目 | 選定 | 理由・妥協点 |
 |---|---|---|
-| 3D描画 | **three.js r160.1（ローカル同梱）** | CDN不使用。`vendor/three/` に同梱済み。外部通信ゼロ。 |
-| 読み込み形式 | **`three.module.min.js`（ESM・670KB・自己完結）** | 依存ファイル1つ。importmap不要（相対パスimportで解決）。 |
+| 3D描画 | **three.js r185.1（ローカル同梱）** | CDN不使用。`vendor/three/` に同梱済み。外部通信ゼロ。 |
+| 読み込み形式 | **ESM 2ファイル（`three.module.min.js` + `three.core.min.js`／計733KB）** | importmap不要。`module` が `./three.core.min.js` を相対importする。 |
 | ゲームロジック | **Vanilla JS（ES Modules）** | ビルド不要。トランスパイルなし。依存はthree.jsのみ。 |
 | モデル | **プリミティブ合成（Box/Sphere/Capsule/Cone）** | GLTFローダー不使用。パース時間ゼロ、実機で確実に軽い。 |
 | 物理 | **自作（XZ平面の円判定＋空間ハッシュ）** | 物理エンジン不使用。ハクスラに剛体は不要。 |
 | 音 | **Web Audio API で合成** | 音源ファイル同梱ゼロ。容量ゼロ、遅延ゼロ。 |
 | 配信 | **PWA（manifest + Service Worker）** | three.js含む全アセットをプリキャッシュ。完全オフライン動作。 |
 
-### なぜ r160.1 なのか（重要な判断）
+### バージョン選定（r185.1／確定）
 
-現行の three.js（r161以降）は **UMD `three.min.js` を廃止**し、ESM専用になっている。
-さらに r170以降は `three.module.min.js` が `three.core.min.js` を分割importする2ファイル構成。
+現行の three.js は **UMD `three.min.js` を r161 で廃止**し、ESM専用になっている。
+さらに r170以降は `three.module.min.js` が `three.core.min.js` を相対importする2ファイル構成。
 
-**r160.1 は「`three.min.js`（UMD）と自己完結ESMの両方を出荷する最後のバージョン」。**
+**同梱物（`vendor/three/`）**
 
-- 依頼文の「`three.min.js` をローカルに同梱」を字義通り満たせる唯一の選択肢
-- ESM側も**1ファイル自己完結**なので、同梱物が最小（670KB×1）
-- 本作が使う機能（`InstancedMesh` / `WebGLRenderer` / 基本ジオメトリ / シャドウ）は
-  すべて r160 に揃っており、新版に上げる実利がない
+| ファイル | サイズ | 役割 |
+|---|---|---|
+| `three.module.min.js` | 366KB | エントリ。`./three.core.min.js` を相対importする |
+| `three.core.min.js` | 386KB | 実体。自己完結（外部importなし） |
+| `LICENSE` | — | MIT（three.js authors） |
 
-> ⚠️ **確認事項**：最新版（r185）を使いたい場合は同梱が2ファイル（module + core, 計720KB）になる。
-> どちらでも実装可能。指定がなければ **r160.1 で進める**。
+相対import（`./three.core.min.js`）はHTTP経由でそのまま解決されるため、
+**importmap もビルドツールも不要**。両ファイルを同一ディレクトリに置き、
+Service Worker のプリキャッシュに**2つとも**含めることがオフライン動作の条件。
+
+r185.1 で必要APIの存在を検証済み：`InstancedMesh` / `instanceColor` / `FogExp2` /
+`CapsuleGeometry` / `PCFSoftShadowMap` / `ACESFilmicToneMapping` ほか。
+
+> UMDフォールバック（`file://` 直開き）が必要になった場合は、UMDを出荷する
+> 最後の版である r160.1 に差し替える必要がある。現構成では対応しない。
 
 ### ⚠️ 起動方法についての注意（妥協点）
 
@@ -56,8 +64,8 @@ PWA化する時点でどのみちHTTPS/localhostが必要なため、これは�
 ├── manifest.webmanifest
 ├── sw.js                       # Service Worker（プリキャッシュ）
 ├── vendor/three/
-│   ├── three.module.min.js     # ✅ 同梱済み
-│   ├── three.min.js            # UMDフォールバック用（同梱済み）
+│   ├── three.module.min.js     # ✅ 同梱済み（エントリ）
+│   ├── three.core.min.js       # ✅ 同梱済み（実体）
 │   └── LICENSE                 # MIT（three.js authors）
 ├── src/
 │   ├── main.js                 # 起動・DOM配線のみ。ロジックを書かない
@@ -415,17 +423,17 @@ export const GACHA = {
 
   // ── 基礎排出率（合計1.0。起動時にassertで検証する） ──
   baseRates: {
-    N:   0.550,
+    N:   0.530,
     R:   0.320,
-    SR:  0.105,
-    SSR: 0.025,       // 2.5%
+    SR:  0.110,
+    SSR: 0.040,       // 4.0%
   },
 
   // ── 天井（射幸を煽らない範囲で「必ず報われる」設計） ──
   pity: {
-    softStart:   70,     // 70連目からSSR率が上昇
-    softAdd:     0.025,  // 1連ごとに +2.5pt（→ 約99連で実質確定）
-    hard:        100,    // 100連で確定。カウンタはSSR取得でリセット
+    softStart:   50,     // 50連目からSSR率が上昇
+    softAdd:     0.050,  // 1連ごとに +5.0pt（→ 約70連で実質確定）
+    hard:        70,     // 70連で確定。カウンタはSSR取得でリセット
     tenPullFloor:'SR',   // 10連には必ずSR以上が1つ入る
   },
 
@@ -460,8 +468,9 @@ export function validateGacha() {
 ```
 
 **期待値（設計意図）**
-- SSR素引き 2.5% → 平均 40連で1本
-- 天井100連 → 最悪でも100連でSSR確定
+- SSR素引き 4.0% → 素引きだけで平均25連、**天井込みの実効は約21連で1本**
+- 天井70連 → 最悪でも70連でSSR確定
+- SSRを「引ける」レアリティに寄せ、クリップの見せ場を量産できる密度にする
 - 1ステージクリア ≒ 60〜120ジェム想定 → **10ステージ程度で1連**引ける密度
 - **課金要素は一切実装しない。** 通貨はプレイ報酬のみ。
 
@@ -785,7 +794,7 @@ function rollOne(save, banner) {
   if (save.gacha.sinceSSR >= g.pity.softStart) {
     ssr += (save.gacha.sinceSSR - g.pity.softStart + 1) * g.pity.softAdd;
   }
-  if (save.gacha.sinceSSR >= g.pity.hard) ssr = 1.0;
+  if (save.gacha.sinceSSR >= g.pity.hard) ssr = 1.0;   // 70連で確定
   ssr = Math.min(ssr, 1.0);
 
   // 2) レアリティ決定（SSRの増分は下位レアから均等に差し引く）
@@ -893,11 +902,14 @@ self.addEventListener('fetch',    e => e.respondWith(
 
 ---
 
-## 13. 確認したいこと（この2点だけ回答ください）
+## 13. 確定事項（フェーズ1着手の前提）
 
-1. **three.jsのバージョン**：`r160.1`（UMD+自己完結ESMの両方が手に入る最後の版／同梱1ファイル）で進めてよいか。
-   最新 `r185` を希望なら同梱2ファイル構成に変更する。
-2. **ガチャ排出率**：`N 55% / R 32% / SR 10.5% / SSR 2.5%`、ソフト天井70連・**ハード天井100連**。
-   もっと引きやすくする（SSR 3〜4%、天井80連）／渋くする、といった調整希望があれば。
+| 項目 | 決定 |
+|---|---|
+| three.js | **r185.1**（ESM 2ファイル同梱・importmap不要） |
+| ガチャ排出率 | **N 53% / R 32% / SR 11% / SSR 4%** |
+| 天井 | ソフト**50連**から +5.0pt/連 ／ ハード**70連**確定 |
+| 10連保証 | SR以上を1つ以上保証 |
+| すり抜け救済 | SSRの50%がピックアップ。外したら次のSSRは確定 |
 
-指定がなければ上記のまま **フェーズ1（動く3D）** に着手する。
+→ **フェーズ1（動く3D）に着手する。**

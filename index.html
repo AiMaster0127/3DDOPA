@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a12">
+  <title>DOPA ARENA</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0a12'/%3E%3Cpath d='M9 8h7a8 8 0 010 16H9z' fill='none' stroke='%2343e8ff' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./src/ui/styles.css">
+</head>
+<body>
+  <canvas id="gl"></canvas>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hud" hidden>
+    <div class="hud-top">
+      <div id="statPanel" class="stat-panel">
+        <span class="stat"><b id="fps">--</b><i>FPS</i></span>
+        <span class="stat"><b id="tier">-</b><i>品質</i></span>
+        <span class="stat"><b id="draws">-</b><i>DRAW</i></span>
+      </div>
+    </div>
+    <div class="hud-bottom">
+      <p class="hint" id="hint">画面をドラッグして移動　/　PCは WASD・矢印キー</p>
+    </div>
+  </div>
+
+  <!-- ===== 仮想スティック（タッチ時のみ表示） ===== -->
+  <div id="stick" class="stick" hidden>
+    <div class="stick-base"></div>
+    <div class="stick-knob" id="stickKnob"></div>
+  </div>
+
+  <!-- ===== 起動画面 ===== -->
+  <div id="boot" class="boot">
+    <h1 class="boot-title">DOPA<span>ARENA</span></h1>
+    <p class="boot-sub">PHASE 1 — 動く3D</p>
+    <p id="bootMsg" class="boot-msg">読み込み中…</p>
+    <button id="startBtn" class="boot-btn" hidden>ARENA へ</button>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
