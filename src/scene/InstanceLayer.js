@@ -90,9 +90,12 @@ export class InstanceLayer {
     this.group.add(this.projIM);
 
     // ---- 経験値ジェム ----
+    // ★Basic（無照明）だと八面体が真上から見て「ただの四角」に見えてしまう。
+    //   Lambert にして陰影を付けると、小さくても立体の宝石として読める。
+    //   emissive を少し入れて暗い床の上でも沈まないようにする。
     this.pickupIM = new THREE.InstancedMesh(
-      new THREE.OctahedronGeometry(0.26, 0),
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),   // 自発光に見せる
+      new THREE.OctahedronGeometry(0.28, 0),
+      new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x1d7a60 }),
       pickups.cap
     );
     this.pickupIM.frustumCulled = false;

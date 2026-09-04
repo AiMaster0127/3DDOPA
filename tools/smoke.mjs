@@ -517,6 +517,80 @@ check(metaRes.saved.atkUp > 0 && metaRes.saved.unlocks.includes('banner_prime') 
       '強化・実績・解放がセーブに残る',
       `強化Lv.${metaRes.saved.atkUp} / 解放 ${metaRes.saved.unlocks.join(',')} / 実績 ${metaRes.saved.achCount}件`);
 
+// ---- 演出・共有・PWA（フェーズ7） ----
+const juice = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = {};
+
+  // 命中でダメージ数字と火花が出るか
+  g.startRun();
+  g.player.takeDamage = () => false;
+  g.sparks.clear(); g.damageNumbers.clear();
+  g.spawner.spawnBurst(20, g.player, 2.4);
+  let dn = 0, sp = 0;
+  for (let i = 0; i < 25; i++) {
+    await wait(100);
+    dn = Math.max(dn, g.damageNumbers.count);
+    sp = Math.max(sp, g.sparks.count);
+    if (dn > 0 && sp > 0) break;
+  }
+  out.vfx = { numbers: dn, sparks: sp, limit: g.damageNumbers.limit,
+              outline: g.damageNumbers.outline, tier: g.quality.name };
+
+  // 全画面テロップ
+  g.screenFx.bannerShow('TEST', 'sub', 'boss', 3000);
+  await wait(80);
+  out.banner = { shown: !document.getElementById('bigBanner').hidden,
+                 cls: document.getElementById('bigBanner').className };
+  g.screenFx.hideBanner();
+
+  // 共有テキスト
+  g.combat.kills = 123;
+  g.elapsed = 187;
+  const txt = g._shareText(true);
+  out.share = { text: txt, hasTitle: txt.includes('DOPA ARENA'),
+                hasStage: /ステージ\d/.test(txt), hasBuild: txt.includes('装備'),
+                lines: txt.split('\n').length };
+
+  // 音（AudioContext が作れるか。作れなくてもゲームは止まらない設計）
+  out.audio = { ready: g.audio.ready, failed: g.audio.failed };
+  g.audio.hit(true); g.audio.levelUp(); g.audio.bossDown();
+  out.audioSurvived = true;
+  return out;
+});
+
+check(juice.vfx.numbers > 0 && juice.vfx.sparks > 0, '命中でダメージ数字と火花が出る',
+      `数字 ${juice.vfx.numbers} / 粒子 ${juice.vfx.sparks} / 品質 ${juice.vfx.tier}（数字の上限 ${juice.vfx.limit}）`);
+check(juice.banner.shown && juice.banner.cls.includes('boss'), '全画面テロップが出る',
+      juice.banner.cls);
+check(juice.share.hasTitle && juice.share.hasStage && juice.share.hasBuild && juice.share.lines >= 5,
+      '共有テキストが組み立てられる', juice.share.text.replace(/\n/g, ' / '));
+check(juice.audioSurvived, '音の再生でゲームが落ちない',
+      juice.audio.ready ? 'AudioContext 有効' : '無音で続行（この環境ではAudioContextが作れない）');
+
+// ---- PWA ----
+const pwa = await page.evaluate(async () => {
+  const res = await fetch('./manifest.webmanifest');
+  const man = await res.json();
+  const swRes = await fetch('./sw.js');
+  const swText = await swRes.text();
+  // プリキャッシュ一覧に載っているファイルが実在するか全部見る
+  const list = [...swText.matchAll(/'(\.\/[^']+)'/g)].map(m => m[1])
+    .filter(u => u !== './' && !u.endsWith('sw.js'));
+  const missing = [];
+  for (const u of list) {
+    const r = await fetch(u, { method: 'GET' });
+    if (!r.ok) missing.push(u);
+  }
+  return { name: man.name, display: man.display, icons: man.icons.length,
+           start: man.start_url, listed: list.length, missing };
+});
+check(pwa.name === 'DOPA ARENA' && pwa.display === 'fullscreen' && pwa.icons >= 2,
+      'PWAマニフェストが正しい', `${pwa.name} / ${pwa.display} / アイコン${pwa.icons}`);
+check(pwa.missing.length === 0, 'Service Worker のプリキャッシュ一覧が全て実在する',
+      `${pwa.listed} 件中 欠落 ${pwa.missing.length} 件${pwa.missing.length ? ': ' + pwa.missing.join(', ') : ''}`);
+
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);
 check(st.hudFits, 'HUDが画面内に収まる', `${st.css} / 描画バッファ ${st.buf} / DPR ${st.dpr} / 垂直FOV ${st.fov} / ティア ${st.tier}`);

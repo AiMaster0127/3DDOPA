@@ -3,8 +3,8 @@
  */
 import { Game } from './core/Game.js';
 
-const canvas  = document.getElementById('gl');
-const boot    = document.getElementById('boot');
+const canvas = document.getElementById('gl');
+const boot = document.getElementById('boot');
 const bootMsg = document.getElementById('bootMsg');
 const startBtn = document.getElementById('startBtn');
 
@@ -23,6 +23,22 @@ function hasWebGL() {
   } catch { return false; }
 }
 
+/**
+ * Service Worker の登録。
+ * ★失敗してもゲームは動く（オフライン対応が効かないだけ）。
+ *   file:// や非セキュアコンテキストでは登録できないので、静かに諦める。
+ */
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  if (!globalThis.isSecureContext) return null;
+  try {
+    return await navigator.serviceWorker.register('./sw.js', { scope: './' });
+  } catch (err) {
+    console.warn('Service Worker を登録できなかった（オフライン非対応で続行）', err);
+    return null;
+  }
+}
+
 let game = null;
 
 try {
@@ -33,12 +49,17 @@ try {
   bootMsg.textContent = 'READY';
   startBtn.hidden = false;
 
-  // タップで開始する。フェーズ7で AudioContext を起こすのもこのジェスチャに乗せる
   startBtn.addEventListener('click', () => {
+    // ★AudioContext はユーザー操作の中でしか起こせない。ここで解錠する
+    game.audio.unlock();
+
     boot.classList.add('gone');
     setTimeout(() => { boot.hidden = true; }, 480);
     game.start();
   }, { once: true });
+
+  // 起動を待たせないよう、SWの登録は後追いにする
+  registerServiceWorker();
 
 } catch (err) {
   if (err?.message === 'no-webgl') {

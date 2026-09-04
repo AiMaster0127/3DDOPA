@@ -5,6 +5,7 @@
  */
 import { STAGES, STAGE_BY_ID } from '../data/stages.js';
 import { ENEMY_BY_ID } from '../data/enemies.js';
+import { copyText } from './share.js';
 
 export class StageUI {
   /**
@@ -34,6 +35,19 @@ export class StageUI {
     this.clUnlock = document.getElementById('clUnlock');
     this.clUnlockVal = document.getElementById('clUnlockVal');
     this.btnNext = document.getElementById('clNext');
+    this.clBuild = document.getElementById('clBuild');
+    this.clShare = document.getElementById('clShare');
+    this.clCopy = document.getElementById('clCopy');
+
+    this.clCopy.addEventListener('click', async () => {
+      const ok = await copyText(this.clShare.textContent);
+      this.clCopy.textContent = ok ? 'コピーした！' : 'コピーできなかった';
+      this.clCopy.classList.toggle('copied', ok);
+      setTimeout(() => {
+        this.clCopy.textContent = '結果をコピー';
+        this.clCopy.classList.remove('copied');
+      }, 1800);
+    });
 
     document.getElementById('stagesBack').addEventListener('click', onBack);
     this.btnNext.addEventListener('click', () => { this.hideClear(); onNext(); });
@@ -137,6 +151,9 @@ export class StageUI {
     }
     this.clUnlock.hidden = !o.unlocked;
     if (o.unlocked) this.clUnlockVal.textContent = o.unlocked;
+
+    this.clBuild.textContent = o.build ? `装備 ${o.build}` : '';
+    this.clShare.textContent = o.share || '';
 
     this.btnNext.hidden = !o.hasNext;
     this.clearEl.hidden = false;

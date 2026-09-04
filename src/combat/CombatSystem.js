@@ -71,7 +71,7 @@ export class CombatSystem {
       e.kz += (dz / d) * power;
     }
 
-    this.events.emit(EV.ENEMY_HIT, e, amount);
+    this.events.emit(EV.ENEMY_HIT, e, amount, isCrit);
 
     if (e.hp <= 0) {
       e.dead = true;

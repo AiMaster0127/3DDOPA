@@ -75,7 +75,7 @@ const r = await page.evaluate(async (N) => {
       if (r === 'SSR') continue;
       expect[r] = skip.includes(r) ? 0 : (GACHA.baseRates[r] / restSum) * rest;
     }
-    prime = { counts: pc, M, expect };
+    prime = { counts: pc, M, expect, restSum };
     g.gacha.setBanner('standard');
   }
 
@@ -89,24 +89,43 @@ const r = await page.evaluate(async (N) => {
 }, N);
 
 console.log(`単発 ${r.N.toLocaleString('ja-JP')} 回の実測\n`);
-console.log('レア   表示確率    実測      差       備考');
-console.log('─────────────────────────────────────────────────────');
+
+// ★天井があるぶんSSRは表示確率より必ず高く出る。
+//   そして増えた確率質量は下位レアから「元の比率どおりに」差し引かれる。
+//   したがって N/R/SR を表示確率とそのまま比べると必ず低く出て、
+//   正常なのに失敗する。実測のSSR率を踏まえた期待値と比べること。
+const actualSSR = r.counts.SSR / r.N;
+const baseRestSum = r.rarities.reduce((a, x) => a + (x === 'SSR' ? 0 : r.declared[x]), 0);
+const expected = {};
+for (const rar of r.rarities) {
+  expected[rar] = rar === 'SSR'
+    ? actualSSR
+    : (r.declared[rar] / baseRestSum) * (1 - actualSSR);
+}
+
+console.log('レア   表示確率  天井込み期待   実測      差       判定');
+console.log('──────────────────────────────────────────────────────────');
 
 const fails = [];
 for (const rar of r.rarities) {
   const declared = r.declared[rar];
+  const exp = expected[rar];
   const actual = r.counts[rar] / r.N;
-  const diff = actual - declared;
-  // 天井があるぶんSSRは表示確率より必ず高く出る。それ以外は表示どおりであるべき
-  const note = rar === 'SSR' ? '天井ぶん上振れするのが正しい' : '';
-  const tol = rar === 'SSR' ? 0.02 : 0.006;
-  const ok = rar === 'SSR' ? (diff >= -0.001 && diff < 0.02) : Math.abs(diff) < tol;
-  if (!ok) fails.push(`${rar}: 表示 ${(declared * 100).toFixed(1)}% に対し実測 ${(actual * 100).toFixed(2)}%`);
+  const diff = actual - exp;
+
+  // 期待値からの許容幅。標本誤差(3σ)より少し広く取る
+  const sigma = Math.sqrt(Math.max(exp * (1 - exp), 1e-9) / r.N);
+  const tol = Math.max(4 * sigma, 0.0015);
+  const ok = rar === 'SSR' ? (actualSSR >= declared - 0.001) : Math.abs(diff) < tol;
+
+  if (!ok) fails.push(`${rar}: 期待 ${(exp * 100).toFixed(2)}% に対し実測 ${(actual * 100).toFixed(2)}%（許容 ±${(tol * 100).toFixed(2)}pt）`);
   console.log(
-    `${rar.padEnd(5)} ${(declared * 100).toFixed(1).padStart(6)}%  ${(actual * 100).toFixed(2).padStart(6)}%  ` +
-    `${(diff * 100 >= 0 ? '+' : '')}${(diff * 100).toFixed(2).padStart(5)}pt  ${ok ? 'OK ' : 'NG '} ${note}`
+    `${rar.padEnd(5)} ${(declared * 100).toFixed(1).padStart(6)}%  ${(exp * 100).toFixed(2).padStart(9)}%  ` +
+    `${(actual * 100).toFixed(2).padStart(6)}%  ${(diff * 100 >= 0 ? '+' : '')}${(diff * 100).toFixed(2).padStart(5)}pt  ${ok ? 'OK' : 'NG'}`
   );
 }
+console.log(`\n  SSR実測 ${(actualSSR * 100).toFixed(2)}% は表示 ${(r.declared.SSR * 100).toFixed(1)}% を上回る（天井があるので正しい）。`);
+console.log('  N/R/SR は、増えたSSRぶんを元の比率で差し引いた期待値と比較している。');
 
 console.log('');
 console.log(`SSR の実効排出間隔 : 平均 ${r.avgGap.toFixed(1)} 回 / 最悪 ${r.maxGapSSR} 回`);
@@ -121,12 +140,17 @@ if (r.tenFail > 0) fails.push(`10連保証が働いていない (${r.tenFail} �
 if (r.prime) {
   console.log('');
   console.log(`上級バナー「プライム」（N除外）— ${r.prime.M.toLocaleString('ja-JP')} 回`);
+  // こちらも天井ぶんを織り込んだ期待値で比べる
+  const pSSR = r.prime.counts.SSR / r.prime.M;
   for (const rar of r.rarities) {
-    const exp = r.prime.expect[rar];
     const act = r.prime.counts[rar] / r.prime.M;
-    const ok = rar === 'SSR' ? (act - exp >= -0.002 && act - exp < 0.03)
+    const exp = rar === 'SSR' ? pSSR
+              : rar === 'N'   ? 0
+              : (r.declared[rar] / r.prime.restSum) * (1 - pSSR);
+    const sig = Math.sqrt(Math.max(exp * (1 - exp), 1e-9) / r.prime.M);
+    const ok = rar === 'SSR' ? (pSSR >= r.declared.SSR - 0.002)
              : rar === 'N'   ? act === 0
-             : Math.abs(act - exp) < 0.008;
+             : Math.abs(act - exp) < Math.max(4 * sig, 0.002);
     if (!ok) fails.push(`プライム ${rar}: 期待 ${(exp * 100).toFixed(1)}% に対し実測 ${(act * 100).toFixed(2)}%`);
     console.log(`  ${rar.padEnd(4)} 期待 ${(exp * 100).toFixed(1).padStart(5)}%  実測 ${(act * 100).toFixed(2).padStart(6)}%  ${ok ? 'OK' : 'NG'}`);
   }

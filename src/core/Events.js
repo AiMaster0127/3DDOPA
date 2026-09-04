@@ -29,14 +29,14 @@ export class Events {
   }
 
   /**
-   * 発火。引数は最大2つまで（可変長引数の配列生成を避けるため）。
+   * 発火。引数は最大3つまで（可変長引数の配列生成を避けるため）。
    * ハンドラ内の例外で他のハンドラやゲームループを巻き込まない。
    */
-  emit(type, a, b) {
+  emit(type, a, b, c) {
     const arr = this._map.get(type);
     if (!arr) return;
     for (let i = 0; i < arr.length; i++) {
-      try { arr[i](a, b); }
+      try { arr[i](a, b, c); }
       catch (err) { console.error(`イベント "${type}" のハンドラで例外:`, err); }
     }
   }
@@ -47,7 +47,7 @@ export class Events {
 /** イベント名の定義。タイプミスを1箇所に集約する。 */
 export const EV = {
   ENEMY_KILLED:  'enemy:killed',    // (enemy, archetype)
-  ENEMY_HIT:     'enemy:hit',       // (enemy, {amount, isCrit})
+  ENEMY_HIT:     'enemy:hit',       // (enemy, amount, isCrit)
   PLAYER_HIT:    'player:hit',      // (amount)
   PLAYER_DIED:   'player:died',     // ()
   RUN_STARTED:   'run:started',     // ()

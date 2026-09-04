@@ -191,6 +191,9 @@ export class GachaUI {
       ? `ダブり → かけら+${r.shards} / 強化粉+${r.dust}`
       : `NEW! 攻撃力 ${r.weapon.base.atk} ・ ${r.weapon.flavor}`;
 
+    // SSRだけカードにも脈動を足す
+    this.card.className = `reveal-card${r.rarity === 'SSR' ? ' ssr' : ''}`;
+
     // 再生成してアニメーションを頭から流し直す
     this.card.hidden = false;
     this.card.style.animation = 'none';

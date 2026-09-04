@@ -1,0 +1,17 @@
+{
+  "name": "DOPA ARENA",
+  "short_name": "DOPA ARENA",
+  "description": "three.js 製の3DアクションRPG。ガチャで武器を集め、育てて、アリーナに挑む。",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0a0a12",
+  "theme_color": "#0a0a12",
+  "categories": ["games"],
+  "icons": [
+    { "src": "./assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/icons/maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

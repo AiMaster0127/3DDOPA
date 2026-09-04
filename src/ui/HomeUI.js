@@ -13,10 +13,11 @@ export class HomeUI {
    * @param {import('../save/SaveManager.js').SaveManager} o.save
    * @param {import('../progression/MetaSystem.js').MetaSystem} o.meta
    */
-  constructor({ inventory, save, meta, onSortie, onGacha, onInventory, onStages, onUpgrade, onAchievements }) {
+  constructor({ inventory, save, meta, audio, onSortie, onGacha, onInventory, onStages, onUpgrade, onAchievements }) {
     this.inv = inventory;
     this.save = save;
     this.meta = meta;
+    this.audio = audio;
 
     this.root = document.getElementById('home');
     this.elGems = document.getElementById('wGems');
@@ -36,6 +37,32 @@ export class HomeUI {
     document.getElementById('btnUpgrade').addEventListener('click', onUpgrade);
     document.getElementById('btnAch').addEventListener('click', onAchievements);
     this.elAch = document.getElementById('hAch');
+
+    // 音のオン/オフ。設定はセーブに残す
+    this.btnSfx = document.getElementById('btnSfx');
+    this.btnBgm = document.getElementById('btnBgm');
+    this.btnSfx.addEventListener('click', () => this._toggleSound('sfx'));
+    this.btnBgm.addEventListener('click', () => this._toggleSound('bgm'));
+    this._syncSound();
+  }
+
+  _toggleSound(kind) {
+    const st = this.save.data.settings;
+    const defaults = { sfx: 0.8, bgm: 0.5 };
+    st[kind] = st[kind] > 0 ? 0 : defaults[kind];
+    this.audio.setVolumes({ [kind]: st[kind] });
+    if (kind === 'bgm' && st.bgm === 0) this.audio.stopBgm();
+    this.save.markDirty();
+    this._syncSound();
+    if (st[kind] > 0) this.audio.ui();
+  }
+
+  _syncSound() {
+    const st = this.save.data.settings;
+    this.btnSfx.classList.toggle('on', st.sfx > 0);
+    this.btnBgm.classList.toggle('on', st.bgm > 0);
+    this.btnSfx.textContent = st.sfx > 0 ? '🔊 SE' : '🔇 SE';
+    this.btnBgm.textContent = st.bgm > 0 ? '🎵 BGM' : '🔇 BGM';
   }
 
   setAchievementProgress(text) { this.elAch.textContent = text; }
@@ -52,6 +79,7 @@ export class HomeUI {
   hide() { this.root.hidden = true; }
 
   refresh() {
+    this._syncSound();
     const w = this.save.data.wallet;
     this.elGems.textContent = w.gems;
     this.elTickets.textContent = w.tickets;
