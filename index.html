@@ -32,12 +32,17 @@
         </div>
       </div>
       <div class="hud-right">
-        <div class="run-stat"><b id="timeVal">0:00</b><i>経過</i></div>
+        <div class="run-stat"><b id="stageVal">1</b><i>ステージ</i></div>
+        <div class="run-stat"><b id="timeVal">0:00</b><i>残り</i></div>
         <div class="run-stat"><b id="killVal">0</b><i>撃破</i></div>
         <div class="run-stat"><b id="acctVal">Lv.1</b><i>永続</i></div>
       </div>
     </div>
     <div class="hud-bottom">
+      <div id="bossBar" class="boss" hidden>
+        <span class="boss-name" id="bossName">ボス</span>
+        <div class="boss-track"><span id="bossFill" class="boss-fill"></span></div>
+      </div>
       <p class="hint" id="hint">画面をドラッグして移動　/　攻撃は自動</p>
     </div>
   </div>
@@ -56,12 +61,24 @@
     <div class="home-main">
       <h1 class="home-title">DOPA<span>ARENA</span></h1>
       <p class="home-equip">装備中：<b id="hEquip">鉄の剣</b> <span id="hEquipAtk"></span></p>
-      <button id="btnSortie" class="home-btn primary">出撃</button>
+      <button id="btnSortie" class="home-btn primary">出撃<small id="hStage">ステージ1</small></button>
       <div class="home-row">
+        <button id="btnStages" class="home-btn">ステージ選択</button>
         <button id="btnGacha" class="home-btn">ガチャ</button>
         <button id="btnInv" class="home-btn">装備</button>
       </div>
       <p class="home-best" id="hBest"></p>
+    </div>
+  </div>
+
+  <!-- ===== ステージ選択 ===== -->
+  <div id="stages" class="panel" hidden>
+    <header class="panel-top">
+      <button id="stagesBack" class="panel-back" type="button">← 戻る</button>
+      <div class="wallet"><span class="w-item" id="sProgress">攻略 0/8</span></div>
+    </header>
+    <div class="stage-body">
+      <div class="stage-list" id="stageList"></div>
     </div>
   </div>
 
@@ -133,6 +150,26 @@
     <p class="lv-kicker">LEVEL UP</p>
     <h2 class="lv-title">Lv.<span id="lvNum">2</span></h2>
     <div class="lv-cards" id="lvCards"></div>
+  </div>
+
+  <!-- ===== ステージクリア ===== -->
+  <div id="clear" class="over clear" hidden>
+    <p class="clear-kicker">STAGE CLEAR</p>
+    <h2 class="clear-title" id="clTitle">崩れた闘技場</h2>
+    <div class="over-stats">
+      <div><b id="clTime">0:00</b><i>クリア時間</i></div>
+      <div><b id="clKills">0</b><i>撃破数</i></div>
+      <div><b id="clLevel">1</b><i>到達Lv</i></div>
+    </div>
+    <div class="over-meta">
+      <p>報酬 <b id="clReward">💎0</b></p>
+      <p id="clFirst" class="over-levelup" hidden>初回クリア報酬 <b id="clFirstVal"></b></p>
+      <p id="clUnlock" class="over-levelup" hidden>新ステージ <b id="clUnlockVal"></b> が解放された！</p>
+    </div>
+    <div class="over-actions">
+      <button id="clNext" class="boot-btn">次のステージへ</button>
+      <button id="clHome" class="home-btn">拠点へ戻る</button>
+    </div>
   </div>
 
   <!-- ===== 死亡画面 ===== -->

@@ -14,6 +14,7 @@ import { CameraRig } from '../scene/CameraRig.js';
 import { Arena } from '../scene/Arena.js';
 import { PlayerView } from '../scene/PlayerView.js';
 import { InstanceLayer } from '../scene/InstanceLayer.js';
+import { BossView } from '../scene/BossView.js';
 
 import { Player } from '../entities/Player.js';
 import { EnemyPool } from '../entities/Enemy.js';
@@ -32,7 +33,7 @@ import { SpatialGrid } from '../combat/Collision.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
 import { AutoAim } from '../combat/AutoAim.js';
 import { WeaponSystem } from '../combat/WeaponSystem.js';
-import { SpawnDirector } from '../combat/SpawnDirector.js';
+import { SpawnDirector, STAGE_RESULT } from '../combat/SpawnDirector.js';
 
 import { Input } from '../ui/Input.js';
 import { Hud } from '../ui/Hud.js';
@@ -41,9 +42,11 @@ import { LevelUpUI } from '../ui/LevelUpUI.js';
 import { HomeUI } from '../ui/HomeUI.js';
 import { GachaUI } from '../ui/GachaUI.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
+import { StageUI } from '../ui/StageUI.js';
 
 import { SKILL_BY_ID } from '../data/skills.js';
 import { validateGacha } from '../data/gacha.js';
+import { STAGE_BY_ID, STAGES } from '../data/stages.js';
 
 export const STATE = {
   HOME: 'home',           // 拠点。ガチャ・装備・出撃
@@ -74,6 +77,7 @@ export class Game {
     this.scene = new SceneManager(canvas, TIERS[initialTier].aa);
     this.arena = new Arena(this.scene.scene);
     this.playerView = new PlayerView(this.scene.scene);
+    this.bossView = new BossView(this.scene.scene);
     this.cameraRig = new CameraRig(this.scene.camera);
 
     // ---- 論理（three.js を知らない層） ----
@@ -96,7 +100,15 @@ export class Game {
     });
     this.spawner = new SpawnDirector({
       enemies: this.enemies, rng: this.rng, arenaRadius: this.arena.radius,
+      onBossSpawn: (e) => this._onBossSpawn(e),
     });
+
+    // ★AIから外の世界へ働きかける唯一の口。
+    //   ここを介させることで、AI は three.js にも戦闘システムにも直接触らない。
+    this.enemies.ctx.fire = (e, dx, dz, shoot) => this._enemyFire(e, dx, dz, shoot);
+    this.enemies.ctx.summon = (e, id, count) => this._enemySummon(e, id, count);
+    this.enemies.ctx.slam = (e, radius, dmg) =>
+      this.combat.enemySlam(e, radius, dmg * this.spawner.atkMul, this.player);
 
     // ---- 成長 ----
     this.skills = new SkillSystem({
@@ -131,6 +143,7 @@ export class Game {
       onSortie: () => this.startRun(),
       onGacha: () => { this.homeUI.hide(); this.gachaUI.show(); },
       onInventory: () => { this.homeUI.hide(); this.inventoryUI.show(); },
+      onStages: () => { this.homeUI.hide(); this.stageUI.show(); },
     });
     this.gachaUI = new GachaUI({
       gacha: this.gacha, director: this.gachaDirector,
@@ -142,6 +155,20 @@ export class Game {
       onEquip: (id) => this.equip(id),
       onBack: () => { this.inventoryUI.hide(); this.homeUI.show(); },
     });
+    this.stageUI = new StageUI({
+      save: this.save,
+      onSelect: (id) => { this.selectStage(id); this.stageUI.hide(); this.homeUI.show(); },
+      onBack: () => { this.stageUI.hide(); this.homeUI.show(); },
+      onNext: () => this._startNextStage(),
+      onHome: () => this.goHome(),
+    });
+
+    // 最後に遊んだステージ（未解禁なら遊べる中で一番進んだところ）
+    this.stageId = this.save.data.meta.lastStage || 1;
+    if (!this.stageUI.isUnlocked(STAGE_BY_ID.get(this.stageId) || STAGES[0])) {
+      this.stageId = this.stageUI.highestUnlocked();
+    }
+    this.spawner.setStage(this.stageId);
 
     // 品質が変わったら描画側にまとめて反映する
     this.quality = new Quality((tier) => {
@@ -176,6 +203,23 @@ export class Game {
 
     this.events.on(EV.LEVEL_UP, () => this.cameraRig.shake(0.3));
 
+    // ボス撃破。ステージのクリア条件に直結する
+    this.events.on(EV.ENEMY_KILLED, (e, arch) => {
+      if (e.isBoss) {
+        this.spawner.notifyBossDefeated();
+        this.bossView.detach();
+        this.cameraRig.shake(1.4);
+        this.save.data.stats.totalBosses++;
+      }
+      // 分裂する敵は、倒れた位置に欠片を残す
+      if (arch.split) {
+        for (let i = 0; i < arch.split.count; i++) {
+          const a = (i / arch.split.count) * Math.PI * 2;
+          this.spawner.spawnAt(arch.split.id, e.x + Math.sin(a) * 1.1, e.z + Math.cos(a) * 1.1);
+        }
+      }
+    });
+
     this.events.on(EV.PLAYER_DIED, () => {
       this.state = STATE.DEAD;
       this.cameraRig.shake(1.2);
@@ -193,6 +237,35 @@ export class Game {
         xpGained: res.xpGained, levelsGained: res.levelsGained, newAccountLv: res.newLevel,
       });
     });
+  }
+
+  _onBossSpawn(e) {
+    this.bossView.attach(e);
+    this.cameraRig.shake(0.9);
+  }
+
+  /** 敵が弾を撃つ。味方弾と同じプールを hostile フラグで共用する。 */
+  _enemyFire(e, dirX, dirZ, shoot) {
+    this.projectiles.spawn(
+      e.x + dirX * e.radius, e.z + dirZ * e.radius,
+      dirX, dirZ, shoot.speed,
+      {
+        radius: shoot.radius,
+        life: shoot.range / shoot.speed,
+        damage: shoot.dmg * this.spawner.atkMul,
+        crit: 0, critDmg: 0, knock: 0,
+        element: 'none', effects: null,
+        hostile: true, pierce: 0, visualIndex: 0,
+      }
+    );
+  }
+
+  /** ボスが取り巻きを呼ぶ。 */
+  _enemySummon(e, id, count) {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + this.rng.next();
+      this.spawner.spawnAt(id, e.x + Math.sin(a) * 4.5, e.z + Math.cos(a) * 4.5);
+    }
   }
 
   /** レベルアップ選択の確定。まだ残っていれば次の選択を出す。 */
@@ -225,12 +298,24 @@ export class Game {
     this.goHome();
   }
 
+  /** 遊ぶステージを選ぶ。 */
+  selectStage(id) {
+    this.stageId = id;
+    this.save.data.meta.lastStage = id;
+    this.save.markDirty();
+    this.spawner.setStage(id);
+    this.homeUI.setStage(STAGE_BY_ID.get(id));
+  }
+
   /** 拠点へ。ランは止め、HUDを隠す。 */
   goHome() {
     this.state = STATE.HOME;
     this.screens.hideGameOver();
+    this.stageUI.hideClear();
+    this.stageUI.hide();
     this.levelUpUI.hide();
     this.hud.hide();
+    this.bossView.detach();
 
     // 拠点で装備を変えられるので、次の出撃に備えて敵を片付けておく
     this.enemies.despawnAll();
@@ -238,6 +323,7 @@ export class Game {
     this.pickups.despawnAll();
     this.grid.clear();
 
+    this.homeUI.setStage(STAGE_BY_ID.get(this.stageId));
     this.homeUI.show();
   }
 
@@ -246,8 +332,11 @@ export class Game {
     this.homeUI.hide();
     this.gachaUI.hide();
     this.inventoryUI.hide();
+    this.stageUI.hide();
+    this.stageUI.hideClear();
     this.screens.hideGameOver();
     this.hud.show();
+    this.bossView.detach();
 
     this.state = STATE.PLAYING;
     this.elapsed = 0;
@@ -267,7 +356,7 @@ export class Game {
     this.grid.clear();
 
     this.combat.reset();
-    this.spawner.reset();
+    this.spawner.setStage(this.stageId);
     this.autoAim.reset();
     this.weapons.reset();
     this.cameraRig.reset();
@@ -330,8 +419,55 @@ export class Game {
     const xp = this.pickups.update(dt, this.player);
     if (xp > 0 && this.levels.gain(xp)) this._showLevelUp();
 
-    // 9. 湧き
-    this.spawner.tick(dt, this.player);
+    // 9. 敵弾 × 自機
+    this.combat.resolveHostileProjectiles(this.player);
+
+    // 10. ステージ進行（湧き・ボス出現・クリア判定）
+    if (this.spawner.tick(dt, this.player) === STAGE_RESULT.CLEAR) this._onStageClear();
+  }
+
+  /** ステージクリア。報酬・解禁・永続経験値をここで精算する。 */
+  _onStageClear() {
+    if (this.state !== STATE.PLAYING) return;
+    this.state = STATE.DEAD;          // 入力と湧きを止める（死亡と同じ扱いでよい）
+
+    const stage = STAGE_BY_ID.get(this.stageId);
+    const meta = this.save.data.meta;
+    const first = !meta.clearedStages[this.stageId];
+
+    let gems = stage.reward.gems + this.runGems;
+    let firstReward = null;
+    if (first) {
+      meta.clearedStages[this.stageId] = true;
+      firstReward = stage.reward.firstClear;
+      if (firstReward) {
+        gems += firstReward.gems || 0;
+        this.save.data.wallet.tickets += firstReward.tickets || 0;
+      }
+    }
+    this.save.data.stats.bestStage = Math.max(this.save.data.stats.bestStage, this.stageId);
+
+    const res = this.meta.finishRun({
+      kills: this.combat.kills, elapsed: this.elapsed,
+      runLv: this.levels.level, gems,
+    });
+
+    // 次のステージが解禁されたか
+    const next = STAGES.find(s => s.unlock === this.stageId);
+    const unlocked = first && next ? `${next.id}: ${next.name}` : null;
+    this._nextStageId = next && this.stageUI.isUnlocked(next) ? next.id : null;
+
+    this.stageUI.showClear({
+      stage: this.stageId, elapsed: this.elapsed, kills: this.combat.kills,
+      runLv: this.levels.level, gems,
+      first: firstReward, unlocked, hasNext: !!this._nextStageId,
+    });
+    void res;
+  }
+
+  _startNextStage() {
+    if (this._nextStageId) this.selectStage(this._nextStageId);
+    this.startRun();
   }
 
   /** 毎フレームの描画。alpha は前フレームからの補間係数。 */
@@ -341,6 +477,9 @@ export class Game {
 
     this.playerView.sync(this.player, alpha, dt);
     this.instances.sync(alpha);
+
+    const boss = this.spawner.bossAlive ? this.enemies.findBoss() : null;
+    this.bossView.sync(boss, alpha, dt);
     this.cameraRig.follow(this.player, dt);
     this.scene.syncShadow(this.player.x, this.player.z);
 
@@ -355,7 +494,8 @@ export class Game {
     this.hud.syncLevel(this.levels.level, this.levels.xp01);
     this.hud.syncSkills(this._skillChips());
     this.hud.syncAccount(this.meta.level);
-    this.hud.syncRun(this.elapsed, this.combat.kills);
+    this.hud.syncRun(this.spawner.remaining, this.combat.kills, this.stageId);
+    this.hud.syncBoss(boss);
     this.hud.syncDebug(dt, this.quality.name, this.scene.drawCalls, this.enemies.count);
     if (this.input.isActive) this.hud.dismissHint();
   }

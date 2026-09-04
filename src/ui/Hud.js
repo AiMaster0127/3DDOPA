@@ -18,6 +18,11 @@ export class Hud {
     this.elTime = document.getElementById('timeVal');
     this.elKills = document.getElementById('killVal');
     this.elAcct = document.getElementById('acctVal');
+    this.elStage = document.getElementById('stageVal');
+
+    this.bossEl = document.getElementById('bossBar');
+    this.bossName = document.getElementById('bossName');
+    this.bossFill = document.getElementById('bossFill');
 
     this.elRunLv = document.getElementById('runLv');
     this.elXpFill = document.getElementById('xpFill');
@@ -27,6 +32,7 @@ export class Hud {
     this._hp = -1; this._maxHp = -1; this._hpClass = '';
     this._time = -1; this._kills = -1; this._acct = -1;
     this._runLv = -1; this._xp01 = -1; this._chipKey = '';
+    this._stage = -1; this._bossName = ''; this._boss01 = -1;
 
     // fpsは瞬間値だと読めないので0.25秒ぶんを平均する
     this._acc = 0; this._frames = 0;
@@ -94,13 +100,38 @@ export class Hud {
     this.elAcct.textContent = `Lv.${level}`;
   }
 
-  syncRun(elapsedSec, kills) {
-    const t = Math.floor(elapsedSec);
+  /** @param {number} remainSec ステージの残り時間 */
+  syncRun(remainSec, kills, stageId) {
+    const t = Math.max(0, Math.ceil(remainSec));
     if (t !== this._time) {
       this._time = t;
       this.elTime.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     }
     if (kills !== this._kills) { this._kills = kills; this.elKills.textContent = kills; }
+    if (stageId !== this._stage) { this._stage = stageId; this.elStage.textContent = stageId; }
+  }
+
+  /**
+   * ボスHPバー。boss が null なら隠す。
+   * ★残りHPが見えないボスは「あとどれくらいか」が判らず、ただ長いだけになる。
+   */
+  syncBoss(boss) {
+    if (!boss) {
+      if (!this.bossEl.hidden) { this.bossEl.hidden = true; this._boss01 = -1; this._bossName = ''; }
+      return;
+    }
+    this.bossEl.hidden = false;
+
+    if (boss.arch.name !== this._bossName) {
+      this._bossName = boss.arch.name;
+      this.bossName.textContent = boss.arch.name;
+    }
+    const r = boss.maxHp > 0 ? Math.max(0, boss.hp / boss.maxHp) : 0;
+    const q = Math.round(r * 400);              // 0.25%刻み
+    if (q !== this._boss01) {
+      this._boss01 = q;
+      this.bossFill.style.width = `${(q / 4).toFixed(2)}%`;
+    }
   }
 
   /** デバッグ指標。0.25秒ごとにまとめて更新する。 */

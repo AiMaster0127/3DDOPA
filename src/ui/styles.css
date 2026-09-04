@@ -453,3 +453,73 @@ html, body {
 .d-actions .home-btn { min-width: 0; width: 100%; padding: 9px 12px; font-size: 13px; }
 
 .over-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center; }
+
+/* ============================================================
+   ステージ / ボス（フェーズ5）
+   ============================================================ */
+
+/* ---- ボスHPバー ---- */
+.boss {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: min(72vw, 460px); margin-bottom: 8px;
+}
+.boss[hidden] { display: none; }
+.boss-name { font-size: 11px; letter-spacing: .18em; color: #ff8a8a; text-shadow: 0 0 12px rgba(255,60,60,.6); }
+.boss-track {
+  width: 100%; height: 9px;
+  background: rgba(8, 10, 22, .8);
+  border: 1px solid rgba(255, 90, 110, .45); border-radius: 999px; overflow: hidden;
+}
+.boss-fill {
+  display: block; height: 100%; width: 100%;
+  background: linear-gradient(90deg, #ff2b4d, #ff8a3c);
+  transition: width .1s linear;
+}
+
+/* ---- ステージ選択 ---- */
+.stage-body { flex: 1 1 auto; padding-top: 14px; overflow-y: auto; }
+.stage-list {
+  display: grid; gap: 9px; max-width: 620px; margin: 0 auto;
+  grid-template-columns: 1fr;
+}
+.stage-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: rgba(20, 23, 52, .9);
+  border: 1px solid rgba(120, 150, 255, .26); border-radius: 12px;
+  font: inherit; color: var(--ink); text-align: left; cursor: pointer;
+  transition: transform .1s ease, border-color .1s ease;
+}
+.stage-card:hover:not(:disabled), .stage-card:focus-visible:not(:disabled) {
+  transform: translateX(3px); border-color: var(--accent); outline: none;
+}
+.stage-card:disabled { opacity: .4; cursor: not-allowed; }
+.stage-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.sc-no {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 9px;
+  display: grid; place-items: center; font-size: 16px; font-weight: 800;
+  background: rgba(67, 232, 255, .12); color: var(--accent);
+}
+.stage-card.cleared .sc-no { background: rgba(110, 240, 200, .16); color: #6ef0c8; }
+.sc-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sc-name { font-size: 14px; font-weight: 700; }
+.sc-meta { font-size: 10.5px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.sc-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+.sc-tag {
+  font-size: 9.5px; padding: 1px 6px; border-radius: 999px;
+  background: rgba(120, 150, 255, .14); color: var(--dim);
+}
+/* ★修飾子は必ず接頭辞つきにする。
+   `.boss` のような一般名だと、HUDのボスHPバー(.boss)と衝突して
+   タグが幅460pxに引き伸ばされる、といった事故が起きる。 */
+.sc-tag--boss { background: rgba(255, 60, 90, .18); color: #ff8a9a; }
+.sc-tag--done { background: rgba(110, 240, 200, .16); color: #6ef0c8; }
+
+/* ---- クリア画面 ---- */
+.over.clear {
+  background: radial-gradient(ellipse at 50% 45%, rgba(10, 60, 70, .85) 0%, rgba(6, 6, 14, .94) 70%);
+}
+.clear-kicker { font-size: 11px; letter-spacing: .42em; color: var(--accent); }
+.clear-title {
+  font-size: clamp(26px, 8vw, 52px); font-weight: 900; color: var(--ink);
+  text-shadow: 0 0 30px rgba(67, 232, 255, .55);
+}

@@ -86,6 +86,7 @@ export class InstanceLayer {
     this.projIM.frustumCulled = false;
     this.projIM.count = 0;
     this.projIM.__color = new THREE.Color(0xffe9a8);
+    this.projIM.__hostileColor = new THREE.Color(0xff5a6e);   // 敵弾は赤。避けるべき物だと一目で判る
     this.group.add(this.projIM);
 
     // ---- 経験値ジェム ----
@@ -120,7 +121,7 @@ export class InstanceLayer {
     const list = this.enemies.list;
     for (let i = 0; i < this.enemies.cap; i++) {
       const e = list[i];
-      if (!e.active) continue;
+      if (!e.active || e.isBoss) continue;      // ボスは BossView が個別に描く
 
       const im = ims[e.archIndex];
       const n = im.__n++;
@@ -158,9 +159,10 @@ export class InstanceLayer {
       _p.set(lerp(p.px, p.x, alpha), 1.0, lerp(p.pz, p.z, alpha));
       _e.set(0, p.facing, 0);
       _q.setFromEuler(_e);
-      _s.setScalar(1);
+      // 敵弾は大きめ＋赤。自分の弾と混ざると避けようがない
+      _s.setScalar(p.hostile ? 1.5 : 1);
       im.setMatrixAt(n, _m.compose(_p, _q, _s));
-      im.setColorAt(n, im.__color);
+      im.setColorAt(n, p.hostile ? im.__hostileColor : im.__color);
       n++;
     }
 

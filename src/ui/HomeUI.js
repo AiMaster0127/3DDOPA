@@ -13,7 +13,7 @@ export class HomeUI {
    * @param {import('../save/SaveManager.js').SaveManager} o.save
    * @param {import('../progression/MetaSystem.js').MetaSystem} o.meta
    */
-  constructor({ inventory, save, meta, onSortie, onGacha, onInventory }) {
+  constructor({ inventory, save, meta, onSortie, onGacha, onInventory, onStages }) {
     this.inv = inventory;
     this.save = save;
     this.meta = meta;
@@ -26,10 +26,19 @@ export class HomeUI {
     this.elEquip = document.getElementById('hEquip');
     this.elEquipAtk = document.getElementById('hEquipAtk');
     this.elBest = document.getElementById('hBest');
+    this.elStage = document.getElementById('hStage');
+    this.stage = null;
 
     document.getElementById('btnSortie').addEventListener('click', onSortie);
     document.getElementById('btnGacha').addEventListener('click', onGacha);
     document.getElementById('btnInv').addEventListener('click', onInventory);
+    document.getElementById('btnStages').addEventListener('click', onStages);
+  }
+
+  /** 出撃ボタンに、いま選んでいるステージを出す。 */
+  setStage(stage) {
+    this.stage = stage;
+    this.elStage.textContent = stage ? `${stage.id}. ${stage.name}` : '';
   }
 
   get visible() { return !this.root.hidden; }
@@ -51,10 +60,12 @@ export class HomeUI {
 
     const st = this.save.data.stats;
     const col = this.inv.collection();
+    const cleared = Object.keys(this.save.data.meta.clearedStages || {}).length;
     const t = Math.floor(st.bestTimeMs / 1000);
     this.elBest.textContent = st.totalRuns
-      ? `最長生存 ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} ／ ` +
-        `最高Lv.${st.bestRunLv} ／ 累計撃破 ${st.totalKills} ／ 図鑑 ${col.have}/${col.total}`
+      ? `攻略ステージ ${cleared} ／ 最高Lv.${st.bestRunLv} ／ 累計撃破 ${st.totalKills} ／ ` +
+        `討伐ボス ${st.totalBosses} ／ 図鑑 ${col.have}/${col.total}`
       : `図鑑 ${col.have}/${col.total}`;
+    void t;
   }
 }

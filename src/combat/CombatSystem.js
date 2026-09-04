@@ -165,7 +165,7 @@ export class CombatSystem {
 
     for (let i = 0; i < projs.cap; i++) {
       const p = projs.list[i];
-      if (!p.active) continue;
+      if (!p.active || p.hostile) continue;      // 敵弾は別処理
 
       const n = this.grid.query(p.x, p.z, p.radius + 1.0);
       const res = this.grid.result;
@@ -254,6 +254,42 @@ export class CombatSystem {
   }
 
   /**
+   * 敵弾 × 自機。
+   * 当たった弾は必ず消す（貫通させると弾幕が理不尽になる）。
+   */
+  resolveHostileProjectiles(player) {
+    if (player.dead) return;
+    const projs = this.projectiles;
+
+    for (let i = 0; i < projs.cap; i++) {
+      const p = projs.list[i];
+      if (!p.active || !p.hostile) continue;
+
+      const dx = player.x - p.x, dz = player.z - p.z;
+      const r = player.radius + p.radius;
+      if (dx * dx + dz * dz > r * r) continue;
+
+      projs.despawn(p);
+      if (player.takeDamage(p.damage)) {
+        this.events.emit(EV.PLAYER_HIT, p.damage);
+        if (player.dead) this.events.emit(EV.PLAYER_DIED);
+        return;
+      }
+    }
+  }
+
+  /** ボスの叩きつけなど、敵側の範囲攻撃。 */
+  enemySlam(source, radius, damage, player) {
+    const dx = player.x - source.x, dz = player.z - source.z;
+    const r = radius + player.radius;
+    if (dx * dx + dz * dz > r * r) return;
+    if (player.takeDamage(damage)) {
+      this.events.emit(EV.PLAYER_HIT, damage);
+      if (player.dead) this.events.emit(EV.PLAYER_DIED);
+    }
+  }
+
+  /**
    * 敵同士の重なり回避。
    * これがないと全部が1点に重なって「1体しかいないように見える」。
    *
@@ -265,7 +301,7 @@ export class CombatSystem {
     const list = this.enemies.list;
     for (let i = 0; i < this.enemies.cap; i++) {
       const e = list[i];
-      if (!e.active) continue;
+      if (!e.active || e.isBoss) continue;      // ボスは雑魚に押されない
 
       const n = this.grid.query(e.x, e.z, e.radius * 2 + 0.6);
       const res = this.grid.result;

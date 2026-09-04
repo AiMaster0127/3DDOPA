@@ -345,6 +345,93 @@ check(gear.equip.equipped === gear.equip.id && gear.equip.weapon === gear.equip.
 check(gear.effects.burning > 0, '武器の特殊効果が敵に乗る',
       `${gear.effects.weapon}: 生存 ${gear.effects.alive} 体中 炎上中 ${gear.effects.burning} 体 / 総ダメージ ${gear.effects.dmg}`);
 
+// ---- ステージ・ボス（フェーズ5） ----
+const stage = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = {};
+
+  // 解禁：最初は1しか遊べない
+  g.save.data.meta.clearedStages = {};
+  out.locked = { highest: g.stageUI.highestUnlocked() };
+
+  // ステージ3（ボスあり）へ
+  g.save.data.meta.clearedStages = { 1: true, 2: true };
+  g.selectStage(3);
+  g.startRun();
+  g.player.takeDamage = () => false;
+  await wait(250);
+  out.run = { stage: g.stageId, dur: g.spawner.duration, hasBoss: g.spawner.hasBoss,
+              hpMul: +g.spawner.hpMul.toFixed(2), atkMul: +g.spawner.atkMul.toFixed(2) };
+
+  // 射撃敵の弾が飛ぶか。
+  // ★敵弾の寿命は 射程/弾速 ＝ 1秒未満。一瞬だけ数えると見逃すので、
+  //   窓の中を刻んで最大値を取る。
+  g.spawner.spawnAt('en_stinger', g.player.x + 10, g.player.z);
+  let hostile = 0;
+  for (let i = 0; i < 30; i++) {
+    await wait(100);
+    let n = 0;
+    for (const p of g.projectiles.list) if (p.active && p.hostile) n++;
+    hostile = Math.max(hostile, n);
+    if (hostile > 0) break;
+  }
+  out.hostile = hostile;
+
+  // 分裂：倒すと欠片が残る
+  const n0 = g.enemies.count;
+  const blob = g.spawner.spawnAt('en_blob', g.player.x + 3, g.player.z);
+  if (blob) g.combat.hitEnemy(blob, 999999, false, g.player.x, g.player.z, 0);
+  await wait(60);
+  out.split = { before: n0, after: g.enemies.count };
+
+  // ボス出現 → HPバーと専用描画
+  g.spawner.elapsed = 149.9;
+  await wait(900);
+  const boss = g.enemies.findBoss();
+  out.boss = boss ? { id: boss.arch.id, hp: Math.round(boss.hp),
+                      bar: !document.getElementById('bossBar').hidden,
+                      view: g.bossView.group.visible } : null;
+
+  // ★プールが満杯でもボスが湧くか（湧かないとステージが永遠にクリアできない）
+  g.selectStage(3); g.startRun(); g.player.takeDamage = () => false;
+  while (g.enemies.pool.free > 0) if (!g.spawner.spawnAt('en_slime', g.player.x + 20, g.player.z)) break;
+  const free = g.enemies.pool.free;
+  g.spawner.elapsed = 149.9;
+  await wait(900);
+  out.bossWhenFull = { free, spawned: !!g.enemies.findBoss() };
+
+  // クリア → 報酬・解禁・記録
+  const gems0 = g.save.data.wallet.gems;
+  const b2 = g.enemies.findBoss();
+  if (b2) g.combat.hitEnemy(b2, 999999, false, g.player.x, g.player.z, 0);
+  g.spawner.elapsed = 9999;
+  await wait(400);
+  out.clear = { state: g.state, screen: !document.getElementById('clear').hidden,
+                marked: !!g.save.data.meta.clearedStages[3],
+                gained: g.save.data.wallet.gems - gems0,
+                unlocked4: g.stageUI.isUnlocked(
+                  (await import('/src/data/stages.js')).STAGE_BY_ID.get(4)) };
+  return out;
+});
+
+check(stage.locked.highest === 1, '未クリアではステージ1しか遊べない',
+      `解禁上限 ${stage.locked.highest}`);
+check(stage.run.stage === 3 && stage.run.hasBoss && stage.run.hpMul > 1.5,
+      'ステージごとに難度が上がる',
+      `ステージ${stage.run.stage} / ${stage.run.dur}秒 / 敵HP ×${stage.run.hpMul} / 敵攻撃 ×${stage.run.atkMul}`);
+check(stage.hostile > 0, '射撃敵が自機を狙って撃つ', `飛行中の敵弾 ${stage.hostile} 発`);
+check(stage.split.after > stage.split.before - 1, '分裂する敵が欠片を残す',
+      `${stage.split.before} 体 → 倒して ${stage.split.after} 体`);
+check(!!stage.boss && stage.boss.bar && stage.boss.view, 'ボスが出現しHPバーと専用描画が出る',
+      stage.boss ? `${stage.boss.id} HP${stage.boss.hp}` : '出現せず');
+check(stage.bossWhenFull.spawned, 'プールが満杯でもボスが湧く',
+      `空きスロット ${stage.bossWhenFull.free} で出現 ${stage.bossWhenFull.spawned}`);
+check(stage.clear.state === 'dead' && stage.clear.screen && stage.clear.marked &&
+      stage.clear.gained > 0 && stage.clear.unlocked4,
+      'ボス撃破でクリア・報酬・次ステージ解禁',
+      `報酬 💎${stage.clear.gained} / ステージ4解禁 ${stage.clear.unlocked4}`);
+
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);
 check(st.hudFits, 'HUDが画面内に収まる', `${st.css} / 描画バッファ ${st.buf} / DPR ${st.dpr} / 垂直FOV ${st.fov} / ティア ${st.tier}`);

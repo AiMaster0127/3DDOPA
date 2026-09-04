@@ -20,6 +20,8 @@ export const INITIAL_SAVE = {
     accountXp: 0,
     upgrades: { hp: 0, atk: 0, speed: 0, gachaLuck: 0 },   // フェーズ6の拠点強化
     unlocks: [],
+    clearedStages: {},      // ステージID → true（初回クリア済み）
+    lastStage: 1,           // 最後に選んだステージ
   },
 
   wallet: { gems: 0, tickets: 3, dust: 0 },

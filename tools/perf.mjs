@@ -41,6 +41,13 @@ const r = await page.evaluate(async (LOAD) => {
   g._showLevelUp = () => { g.levels.pending = 0; };
   for (let ring = 0; ring < 5; ring++) g.spawner.spawnBurst(LOAD / 5, g.player, 3 + ring * 2.5);
   for (let i = 0; i < 60; i++) g.update(STEP);              // 配置を落ち着かせる
+
+  // ★計測中に敵が減ると「密集時の負荷」を測ったことにならない。
+  //   自機が倒しきってしまうので、HPを実質無限にして密度を保つ。
+  const hold = () => {
+    for (const e of g.enemies.list) if (e.active) { e.maxHp = 1e9; e.hp = 1e9; }
+  };
+  hold();
   const loaded = g.enemies.count;
 
   const bench = (fn, n) => {
@@ -50,14 +57,16 @@ const r = await page.evaluate(async (LOAD) => {
     return (performance.now() - t0) / n * 1000;            // µs/呼び出し
   };
 
+  hold();
   const parts = {
-    'update()':           bench(() => g.update(STEP), 4000),
+    'update()':           bench(() => { g.update(STEP); }, 4000),
     'instances.sync()':   bench(() => g.instances.sync(0.5), 4000),
     'playerView.sync()':  bench(() => g.playerView.sync(g.player, 0.5, STEP), 4000),
     'cameraRig.follow()': bench(() => g.cameraRig.follow(g.player, STEP), 4000),
   };
 
   // ---- ループ内アロケーション：600フレーム回してヒープ増加を見る ----
+  hold();
   globalThis.gc?.();
   await new Promise(res => setTimeout(res, 60));
   const h0 = performance.memory?.usedJSHeapSize ?? 0;
