@@ -25,10 +25,20 @@ await page.goto(BASE, { waitUntil: 'load' });
 await page.click('#startBtn');
 await page.waitForTimeout(800);
 
-const r = await page.evaluate(async () => {
+const LOAD_ENEMIES = 150;    // フェーズ2の完了条件は「敵100体で60fps」
+
+const r = await page.evaluate(async (LOAD) => {
   const g = __DOPA.game;
   const STEP = 1 / 60;
   g.input.state.moveX = 0.7; g.input.state.moveZ = -0.7;   // 最悪ケース（常時入力あり）
+
+  // ★負荷シナリオ：自機の周りを敵で埋める。
+  //   分離処理・当たり判定・AIがすべて最悪密度で回る状態を作る
+  g.startRun();
+  g.player.takeDamage = () => false;                       // 途中で死ぬと計測が止まる
+  for (let ring = 0; ring < 5; ring++) g.spawner.spawnBurst(LOAD / 5, g.player, 3 + ring * 2.5);
+  for (let i = 0; i < 60; i++) g.update(STEP);              // 配置を落ち着かせる
+  const loaded = g.enemies.count;
 
   const bench = (fn, n) => {
     for (let i = 0; i < 2000; i++) fn();                   // JITを温める
@@ -38,9 +48,10 @@ const r = await page.evaluate(async () => {
   };
 
   const parts = {
-    'update()':           bench(() => g.update(STEP), 20000),
-    'playerView.sync()':  bench(() => g.playerView.sync(g.player, 0.5, STEP), 20000),
-    'cameraRig.follow()': bench(() => g.cameraRig.follow(g.player, STEP), 20000),
+    'update()':           bench(() => g.update(STEP), 4000),
+    'instances.sync()':   bench(() => g.instances.sync(0.5), 4000),
+    'playerView.sync()':  bench(() => g.playerView.sync(g.player, 0.5, STEP), 4000),
+    'cameraRig.follow()': bench(() => g.cameraRig.follow(g.player, STEP), 4000),
   };
 
   // ---- ループ内アロケーション：600フレーム回してヒープ増加を見る ----
@@ -49,16 +60,20 @@ const r = await page.evaluate(async () => {
   const h0 = performance.memory?.usedJSHeapSize ?? 0;
   for (let i = 0; i < 600; i++) {
     g.update(STEP);
+    g.instances.sync(0.5);
     g.playerView.sync(g.player, 0.5, STEP);
     g.cameraRig.follow(g.player, STEP);
   }
   const h1 = performance.memory?.usedJSHeapSize ?? 0;
 
   const info = g.scene.renderer.info;
-  return { parts, heapDelta: h1 - h0, measured: !!performance.memory,
+  return { parts, heapDelta: h1 - h0, measured: !!performance.memory, loaded,
+           stillAlive: g.enemies.count, projs: g.projectiles.count,
            draws: g.scene.drawCalls, tris: info.render.triangles,
            geoms: info.memory.geometries, texs: info.memory.textures };
-});
+}, LOAD_ENEMIES);
+
+console.log(`負荷シナリオ: 敵 ${r.loaded} 体を密集配置（計測終了時 ${r.stillAlive} 体 / 弾 ${r.projs} 発）`);
 
 let total = 0;
 for (const [k, v] of Object.entries(r.parts)) {
@@ -78,6 +93,7 @@ const fails = [];
 if (totalMs > JS_BUDGET_MS) fails.push(`JSフレームコスト超過 (${totalMs.toFixed(3)} > ${JS_BUDGET_MS} ms)`);
 if (r.measured && heapKb > HEAP_LIMIT_KB) fails.push(`ループ内アロケーション検出 (${heapKb.toFixed(1)} KB > ${HEAP_LIMIT_KB} KB)`);
 if (r.draws > 100) fails.push(`draw call 超過 (${r.draws} > 100)`);
+if (r.loaded < 100) fails.push(`負荷シナリオの敵数が不足 (${r.loaded} < 100)`);
 if (r.tris > 60000) fails.push(`三角形数 超過 (${r.tris} > 60000)`);
 if (errors.length) fails.push(`ページエラー: ${errors.join(' | ')}`);
 

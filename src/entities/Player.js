@@ -25,20 +25,59 @@ export class Player {
     this.maxSpeed = p.maxSpeed;
     this.speed01 = 0;     // 最高速に対する現在速度の比。演出やHUDが参照する
 
+    // 戦闘
+    this.maxHp = BALANCE.combatPlayer.maxHp;
+    this.hp = this.maxHp;
+    this.dead = false;
+    this.iframe = 0;      // 被弾後の無敵残り秒数
+    this.swing = 0;       // 近接攻撃モーションの残り秒数（描画が参照）
+    this.swingDur = 0.001;
+
     // フェーズ3以降で成長値が乗る器。今は素の値のまま
-    this.stats = { maxHpPct: 0, atkPct: 0, speedPct: 0 };
+    this.stats = { maxHpPct: 0, atkPct: 0, speedPct: 0, critAdd: 0 };
   }
+
+  /** ランの開始時に呼ぶ。 */
+  reset() {
+    this.x = this.z = this.px = this.pz = 0;
+    this.vx = this.vz = 0;
+    this.facing = this.pFacing = 0;
+    this.maxHp = Math.round(BALANCE.combatPlayer.maxHp * (1 + this.stats.maxHpPct));
+    this.hp = this.maxHp;
+    this.dead = false;
+    this.iframe = 0;
+    this.swing = 0;
+    this.speed01 = 0;
+  }
+
+  /**
+   * 被弾。無敵中は何も起きない。
+   * @returns {boolean} 実際にダメージが入ったか
+   */
+  takeDamage(amount) {
+    if (this.dead || this.iframe > 0) return false;
+    this.hp -= amount;
+    this.iframe = BALANCE.combatPlayer.iframe;
+    if (this.hp <= 0) { this.hp = 0; this.dead = true; }
+    return true;
+  }
+
+  get hp01() { return this.maxHp > 0 ? this.hp / this.maxHp : 0; }
 
   /**
    * @param {number} dt        固定ステップ（秒）
    * @param {{moveX:number, moveZ:number}} input  正規化済みの移動入力
    * @param {number} arenaRadius
+   * @param {?object} aim  オートエイムの対象。いれば移動方向より優先して向く
    */
-  update(dt, input, arenaRadius) {
+  update(dt, input, arenaRadius, aim = null) {
     const p = BALANCE.player;
 
     this.px = this.x; this.pz = this.z;
     this.pFacing = this.facing;
+
+    if (this.iframe > 0) this.iframe -= dt;
+    if (this.swing > 0) this.swing = Math.max(0, this.swing - dt);
 
     const ix = input.moveX, iz = input.moveZ;
     const mag = Math.hypot(ix, iz);
@@ -54,14 +93,20 @@ export class Player {
       const sp = Math.hypot(this.vx, this.vz);
       if (sp > cap) { const k = cap / sp; this.vx *= k; this.vz *= k; }
 
-      // 移動方向を向く。dampAngle は ±PI 跨ぎでも最短回りになる
-      this.facing = dampAngle(this.facing, Math.atan2(nx, nz), p.turnRate, dt);
+      // 狙う相手がいないときだけ移動方向を向く（いる場合は下で上書きする）
+      if (!aim) this.facing = dampAngle(this.facing, Math.atan2(nx, nz), p.turnRate, dt);
     } else {
       // 入力なし → 指数減衰で停止（毎フレーム同じ割合だけ減らすので dt に依存しない）
       const k = Math.exp(-p.friction * dt);
       this.vx *= k; this.vz *= k;
       if (Math.abs(this.vx) < 0.01) this.vx = 0;
       if (Math.abs(this.vz) < 0.01) this.vz = 0;
+    }
+
+    // ★狙う相手がいれば常にそちらを向く。移動と向きが独立するので、
+    //   敵を睨んだまま横に逃げる（ストレイフ）が成立する
+    if (aim) {
+      this.facing = dampAngle(this.facing, Math.atan2(aim.x - this.x, aim.z - this.z), p.turnRate, dt);
     }
 
     this.x += this.vx * dt;

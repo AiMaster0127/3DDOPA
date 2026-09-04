@@ -52,6 +52,39 @@ html, body {
 .stat b { font-size: 15px; font-weight: 700; color: var(--accent); }
 .stat i { font-size: 9px; font-style: normal; color: var(--dim); letter-spacing: .08em; }
 
+.hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.hud-left { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.hud-right { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+
+/* ===== HPバー ===== */
+.hp { display: flex; flex-direction: column; gap: 3px; }
+.hp-bar {
+  width: min(46vw, 240px); height: 12px;
+  background: rgba(8, 10, 22, .72);
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.hp-fill {
+  display: block; height: 100%; width: 100%;
+  background: linear-gradient(90deg, #38f5a8, #43e8ff);
+  /* ★幅はJSが毎フレーム書くのでtransitionは短く。長いと実HPとズレて見える */
+  transition: width .12s linear, background .3s ease;
+}
+.hp-fill.low  { background: linear-gradient(90deg, #ffb648, #ff7a3c); }
+.hp-fill.crit { background: linear-gradient(90deg, #ff4d6d, #ff2b2b); }
+.hp-text { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* ===== 経過時間・撃破数 ===== */
+.run-stat {
+  display: flex; align-items: baseline; gap: 6px;
+  background: var(--panel); border: 1px solid var(--stroke);
+  border-radius: 8px; padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.run-stat b { font-size: 16px; font-weight: 700; color: var(--ink); }
+.run-stat i { font-size: 9px; font-style: normal; color: var(--dim); letter-spacing: .08em; }
+
 .hud-bottom { display: flex; justify-content: center; }
 .hint {
   font-size: 11px; color: var(--dim);
@@ -110,3 +143,23 @@ html, body {
 }
 .boot-btn[hidden] { display: none; }
 .boot-btn:active { transform: scale(.96); }
+
+
+/* ===== 死亡画面 ===== */
+.over {
+  position: fixed; inset: 0; z-index: 8;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(60, 8, 24, .82) 0%, rgba(6, 6, 14, .93) 70%);
+  animation: overIn .5s ease both;
+}
+.over[hidden] { display: none; }
+@keyframes overIn { from { opacity: 0 } to { opacity: 1 } }
+
+.over-title {
+  font-size: clamp(30px, 9vw, 62px); font-weight: 900; letter-spacing: .1em;
+  color: #ff4d6d; text-shadow: 0 0 30px rgba(255, 77, 109, .6);
+}
+.over-stats { display: flex; gap: clamp(16px, 6vw, 44px); }
+.over-stats div { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.over-stats b { font-size: clamp(20px, 6vw, 30px); font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+.over-stats i { font-size: 10px; font-style: normal; color: var(--dim); letter-spacing: .1em; }

@@ -22,9 +22,12 @@ export class PlayerView {
 
     // ★床が濃紺なので、自機は「ほぼ白 + 発光アクセント」にして最大コントラストを取る。
     //   青系にすると床に溶けて、乱戦時に自分を見失う。
+    this.torsoMat = new THREE.MeshStandardMaterial({
+      color: 0xe4ebf7, roughness: 0.42, metalness: 0.25,
+      emissive: 0xff2b2b, emissiveIntensity: 0,      // 被弾時だけ光らせる
+    });
     const torso = new THREE.Mesh(
-      new THREE.CapsuleGeometry(p.radius, p.height * 0.5, 4, 12),
-      new THREE.MeshStandardMaterial({ color: 0xe4ebf7, roughness: 0.42, metalness: 0.25 })
+      new THREE.CapsuleGeometry(p.radius, p.height * 0.5, 4, 12), this.torsoMat
     );
     torso.position.y = p.height * 0.5;
     torso.castShadow = true;
@@ -52,16 +55,17 @@ export class PlayerView {
     nose.rotation.x = Math.PI / 2;                    // +Z（正面）を向かせる
     nose.position.set(0, p.height * 0.82, p.radius + 0.24);
 
-    // 武器。フェーズ4で装備中の武器データに応じて差し替える足場
-    this.weapon = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.12, 1.3),
-      new THREE.MeshStandardMaterial({ color: 0xc9d4e2, roughness: 0.3, metalness: 0.65 })
-    );
-    this.weapon.position.set(p.radius + 0.14, p.height * 0.55, 0.15);
+    // 武器。フェーズ4で装備中の武器データに応じて色・形を差し替える
+    this.weaponPivot = new THREE.Group();             // 振り回すための回転軸
+    this.weaponPivot.position.y = p.height * 0.55;
+    this.weaponMat = new THREE.MeshStandardMaterial({ color: 0xc9d4e2, roughness: 0.3, metalness: 0.65 });
+    this.weapon = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.3), this.weaponMat);
+    this.weapon.position.set(p.radius + 0.14, 0, 0.15);
     this.weapon.rotation.x = -0.28;
     this.weapon.castShadow = true;
+    this.weaponPivot.add(this.weapon);
 
-    this.body.add(torso, core, head, nose, this.weapon);
+    this.body.add(torso, core, head, nose, this.weaponPivot);
 
     // 影オフのティア用の簡易影。シャドウマップより桁違いに安い
     this.blob = new THREE.Mesh(
@@ -76,7 +80,7 @@ export class PlayerView {
     this.blob.visible = false;
     this.group.add(this.blob);
 
-    // ★足元の発光リング。敵が群がるフェーズ2以降で「自分がどこか」を保証する。
+    // ★足元の発光リング。敵が群がったときに「自分がどこか」を保証する。
     //   加算合成なので暗い床の上でだけ光り、明るい場所では目立ちすぎない
     this.aura = new THREE.Mesh(
       new THREE.RingGeometry(p.radius * 1.15, p.radius * 1.75, 28),
@@ -89,7 +93,43 @@ export class PlayerView {
     this.aura.position.y = 0.05;
     this.group.add(this.aura);
 
+    // ★近接攻撃の斬撃範囲。装飾ではなく「どこまで届くか」を示す機能。
+    //   これが無いと近接武器の間合いが体で覚えられない
+    this.arcMat = new THREE.MeshBasicMaterial({
+      color: ACCENT, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.arc = new THREE.Mesh(new THREE.RingGeometry(0.4, 1, 20, 1), this.arcMat);
+    this.arc.rotation.x = Math.PI / 2;    // 局所+Y を ワールド+Z（正面）へ寝かせる
+    this.arc.position.y = 0.12;
+    this.arc.visible = false;
+    this.group.add(this.arc);
+
     this._bob = 0;
+    this._arcGeoKey = '';
+  }
+
+  /** 装備武器が変わったら見た目と斬撃範囲を作り直す（頻度が低いので毎回作ってよい）。 */
+  setWeapon(weapon) {
+    this.weaponMat.color.setHex(weapon.visual.color);
+    this.weaponMat.emissive.setHex(weapon.visual.emissive || 0x000000);
+    this.weaponMat.emissiveIntensity = weapon.visual.emissive ? 0.8 : 0;
+
+    const isMelee = weapon.attack.kind === 'melee_arc';
+    this.arc.visible = false;
+    this.arcMat.opacity = 0;
+    if (!isMelee) { this._arcGeoKey = ''; return; }
+
+    const key = `${weapon.base.range}/${weapon.attack.arcDeg}`;
+    if (key === this._arcGeoKey) return;
+    this._arcGeoKey = key;
+
+    const r = weapon.base.range;
+    const half = (weapon.attack.arcDeg * Math.PI) / 360;
+    this.arc.geometry.dispose();
+    // ringのθは +X から +Y 方向。回転後は +X から +Z(正面) 方向になるので、
+    // 正面(θ=PI/2)を中心にするには PI/2 - half から始める
+    this.arc.geometry = new THREE.RingGeometry(r * 0.28, r, 24, 1, Math.PI / 2 - half, half * 2);
   }
 
   /** 品質ティアに応じて、実影 ⇄ 簡易影 を切り替える。 */
@@ -115,6 +155,25 @@ export class PlayerView {
 
     // 走行中だけオーラを強める（速度のフィードバック）
     this.aura.material.opacity = 0.4 + player.speed01 * 0.35;
+
+    // ---- 近接の振り。swing は 武器のlife秒 → 0 へ落ちる ----
+    const t = player.swing > 0 ? player.swing / player.swingDur : 0;   // 1→0
+    if (t > 0) {
+      this.arc.visible = true;
+      this.arcMat.opacity = t * 0.5;
+      this.weaponPivot.rotation.y = lerp(-1.15, 0.75, 1 - t);          // 右から左へ薙ぐ
+    } else {
+      this.arc.visible = false;
+      this.weaponPivot.rotation.y = damp(this.weaponPivot.rotation.y, 0, 12, dt);
+    }
+
+    // ---- 被弾中の赤い明滅。無敵時間が視覚的に判る ----
+    const inv = player.iframe > 0;
+    this.torsoMat.emissiveIntensity = inv ? 0.35 + Math.sin(performance.now() * 0.05) * 0.3 : 0;
+
+    // ---- 死亡：倒れる ----
+    this.body.rotation.z = damp(this.body.rotation.z, player.dead ? Math.PI * 0.42 : 0, 6, dt);
+    this.aura.visible = !player.dead;
   }
 }
 

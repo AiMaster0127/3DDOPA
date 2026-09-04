@@ -14,15 +14,37 @@
   <!-- ===== HUD ===== -->
   <div id="hud" class="hud" hidden>
     <div class="hud-top">
-      <div id="statPanel" class="stat-panel">
-        <span class="stat"><b id="fps">--</b><i>FPS</i></span>
-        <span class="stat"><b id="tier">-</b><i>品質</i></span>
-        <span class="stat"><b id="draws">-</b><i>DRAW</i></span>
+      <div class="hud-left">
+        <div class="hp">
+          <div class="hp-bar"><span id="hpFill" class="hp-fill"></span></div>
+          <span id="hpText" class="hp-text">120 / 120</span>
+        </div>
+        <div id="statPanel" class="stat-panel">
+          <span class="stat"><b id="fps">--</b><i>FPS</i></span>
+          <span class="stat"><b id="tier">-</b><i>品質</i></span>
+          <span class="stat"><b id="draws">-</b><i>DRAW</i></span>
+          <span class="stat"><b id="enemies">0</b><i>敵</i></span>
+        </div>
+      </div>
+      <div class="hud-right">
+        <div class="run-stat"><b id="timeVal">0:00</b><i>経過</i></div>
+        <div class="run-stat"><b id="killVal">0</b><i>撃破</i></div>
       </div>
     </div>
     <div class="hud-bottom">
-      <p class="hint" id="hint">画面をドラッグして移動　/　PCは WASD・矢印キー</p>
+      <p class="hint" id="hint">画面をドラッグして移動　/　攻撃は自動</p>
     </div>
+  </div>
+
+  <!-- ===== 死亡画面 ===== -->
+  <div id="over" class="over" hidden>
+    <h2 class="over-title">DEFEATED</h2>
+    <div class="over-stats">
+      <div><b id="ovTime">0:00</b><i>生存時間</i></div>
+      <div><b id="ovKills">0</b><i>撃破数</i></div>
+      <div><b id="ovDamage">0</b><i>総ダメージ</i></div>
+    </div>
+    <button id="retryBtn" class="boot-btn">もう一度</button>
   </div>
 
   <!-- ===== 仮想スティック（タッチ時のみ表示） ===== -->

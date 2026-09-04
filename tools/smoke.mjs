@@ -99,6 +99,68 @@ const clamp = await page.evaluate(async () => {
 });
 check(clamp.r <= clamp.arena, 'アリーナ外に出られない', `半径 ${clamp.r.toFixed(2)} <= ${clamp.arena}`);
 
+// ---- 戦闘コア（フェーズ2） ----
+// 湧きを待つと運任せになるので、自機の周りに決め打ちで配置して検証する
+const fight = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = {};
+
+  const trial = async (weaponId, dist, ms) => {
+    g.startRun();
+    g.equip(weaponId);
+    g.player.takeDamage = () => false;              // 攻撃性能だけを見たいので不死にする
+    const placed = g.spawner.spawnBurst(24, g.player, dist);
+    await wait(ms);
+    return { placed, kills: g.combat.kills, dmg: Math.round(g.combat.damageDealt) };
+  };
+
+  out.melee = await trial('wp_iron_sword', 2.6, 4000);
+  out.ranged = await trial('wp_short_bow', 8.0, 4000);
+
+  // 敵同士が団子にならないか
+  g.startRun();
+  g.player.takeDamage = () => false;
+  g.spawner.spawnBurst(40, g.player, 6);
+  await wait(1500);
+  const act = g.enemies.list.filter(e => e.active);
+  let deep = 0;
+  for (let i = 0; i < act.length; i++) for (let j = i + 1; j < act.length; j++) {
+    const a = act[i], c = act[j];
+    const need = a.radius + c.radius;
+    if (Math.hypot(a.x - c.x, a.z - c.z) < need * 0.55) deep++;
+  }
+  out.separation = { alive: act.length, deepOverlaps: deep };
+
+  // 被弾して死ぬか
+  g.startRun();
+  delete g.player.takeDamage;                        // プロトタイプの実装に戻す
+  g.player.hp = 10;
+  g.spawner.spawnBurst(12, g.player, 2.0);
+  await wait(3000);
+  out.death = { dead: g.player.dead, state: g.state, over: !document.getElementById('over').hidden };
+
+  // 再挑戦で完全に初期化されるか
+  document.getElementById('retryBtn').click();
+  await wait(400);
+  out.retry = { state: g.state, hp: g.player.hp, kills: g.combat.kills,
+                enemies: g.enemies.count, projs: g.projectiles.count,
+                elapsed: +g.elapsed.toFixed(1), over: document.getElementById('over').hidden };
+  return out;
+});
+
+check(fight.melee.kills > 0, '近接武器で敵を倒せる',
+      `配置 ${fight.melee.placed} 体 → 撃破 ${fight.melee.kills} / ダメージ ${fight.melee.dmg}`);
+check(fight.ranged.kills > 0, '射撃武器で敵を倒せる',
+      `配置 ${fight.ranged.placed} 体 → 撃破 ${fight.ranged.kills} / ダメージ ${fight.ranged.dmg}`);
+check(fight.separation.deepOverlaps === 0, '敵同士が重ならない',
+      `${fight.separation.alive} 体中 深い重なり ${fight.separation.deepOverlaps} ペア`);
+check(fight.death.dead && fight.death.state === 'dead' && fight.death.over,
+      '被弾して死ぬと死亡画面が出る', JSON.stringify(fight.death));
+check(fight.retry.state === 'playing' && fight.retry.kills === 0 && fight.retry.projs === 0 &&
+      fight.retry.elapsed < 1 && fight.retry.over,
+      '再挑戦でランが初期化される', JSON.stringify(fight.retry));
+
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);
 check(st.hudFits, 'HUDが画面内に収まる', `${st.css} / 描画バッファ ${st.buf} / DPR ${st.dpr} / 垂直FOV ${st.fov} / ティア ${st.tier}`);
