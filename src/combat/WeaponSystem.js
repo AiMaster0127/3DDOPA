@@ -49,7 +49,8 @@ export class WeaponSystem {
     if (player.dead || !target || this.cooldown > 0) return false;
 
     const w = this.weapon;
-    this.cooldown = 1 / w.base.rate;
+    // 攻撃速度の成長（sk_haste）はここで効く
+    this.cooldown = 1 / (w.base.rate * (1 + player.stats.rateAdd));
 
     const atk = this.effectiveAtk(player);
     const crit = w.base.crit + player.stats.critAdd;

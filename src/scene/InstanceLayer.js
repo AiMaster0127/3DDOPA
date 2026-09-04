@@ -41,9 +41,10 @@ export class InstanceLayer {
    * @param {import('../entities/Enemy.js').EnemyPool} enemies
    * @param {import('../entities/Projectile.js').ProjectilePool} projectiles
    */
-  constructor(scene, enemies, projectiles) {
+  constructor(scene, enemies, projectiles, pickups) {
     this.enemies = enemies;
     this.projectiles = projectiles;
+    this.pickups = pickups;
 
     this.group = new THREE.Group();
     scene.add(this.group);
@@ -86,6 +87,17 @@ export class InstanceLayer {
     this.projIM.count = 0;
     this.projIM.__color = new THREE.Color(0xffe9a8);
     this.group.add(this.projIM);
+
+    // ---- 経験値ジェム ----
+    this.pickupIM = new THREE.InstancedMesh(
+      new THREE.OctahedronGeometry(0.26, 0),
+      new THREE.MeshBasicMaterial({ color: 0xffffff }),   // 自発光に見せる
+      pickups.cap
+    );
+    this.pickupIM.frustumCulled = false;
+    this.pickupIM.count = 0;
+    this.pickupIM.__color = new THREE.Color(0x6ef0c8);
+    this.group.add(this.pickupIM);
   }
 
   /** 敵の影は高品質時のみ。中/低では影パスから外して描画量を半減させる。 */
@@ -98,6 +110,7 @@ export class InstanceLayer {
   sync(alpha) {
     this._syncEnemies(alpha);
     this._syncProjectiles(alpha);
+    this._syncPickups(alpha);
   }
 
   _syncEnemies(alpha) {
@@ -144,6 +157,30 @@ export class InstanceLayer {
 
       _p.set(lerp(p.px, p.x, alpha), 1.0, lerp(p.pz, p.z, alpha));
       _e.set(0, p.facing, 0);
+      _q.setFromEuler(_e);
+      _s.setScalar(1);
+      im.setMatrixAt(n, _m.compose(_p, _q, _s));
+      im.setColorAt(n, im.__color);
+      n++;
+    }
+
+    im.count = n;
+    im.instanceMatrix.needsUpdate = true;
+    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  }
+
+  _syncPickups(alpha) {
+    const im = this.pickupIM;
+    let n = 0;
+
+    const list = this.pickups.list;
+    for (let i = 0; i < this.pickups.cap; i++) {
+      const g = list[i];
+      if (!g.active) continue;
+
+      // くるくる回して光って見せる。静止した多面体は床の模様に埋もれる
+      _p.set(lerp(g.px, g.x, alpha), 0.55 + Math.sin(g.spin) * 0.12, lerp(g.pz, g.z, alpha));
+      _e.set(g.spin * 0.7, g.spin, 0);
       _q.setFromEuler(_e);
       _s.setScalar(1);
       im.setMatrixAt(n, _m.compose(_p, _q, _s));

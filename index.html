@@ -19,6 +19,11 @@
           <div class="hp-bar"><span id="hpFill" class="hp-fill"></span></div>
           <span id="hpText" class="hp-text">120 / 120</span>
         </div>
+        <div class="xp">
+          <span class="xp-lv" id="runLv">Lv.1</span>
+          <div class="xp-bar"><span id="xpFill" class="xp-fill"></span></div>
+        </div>
+        <div class="skill-chips" id="skillChips"></div>
         <div id="statPanel" class="stat-panel">
           <span class="stat"><b id="fps">--</b><i>FPS</i></span>
           <span class="stat"><b id="tier">-</b><i>品質</i></span>
@@ -29,11 +34,19 @@
       <div class="hud-right">
         <div class="run-stat"><b id="timeVal">0:00</b><i>経過</i></div>
         <div class="run-stat"><b id="killVal">0</b><i>撃破</i></div>
+        <div class="run-stat"><b id="acctVal">Lv.1</b><i>永続</i></div>
       </div>
     </div>
     <div class="hud-bottom">
       <p class="hint" id="hint">画面をドラッグして移動　/　攻撃は自動</p>
     </div>
+  </div>
+
+  <!-- ===== レベルアップ：スキル3択 ===== -->
+  <div id="levelup" class="levelup" hidden>
+    <p class="lv-kicker">LEVEL UP</p>
+    <h2 class="lv-title">Lv.<span id="lvNum">2</span></h2>
+    <div class="lv-cards" id="lvCards"></div>
   </div>
 
   <!-- ===== 死亡画面 ===== -->
@@ -42,7 +55,12 @@
     <div class="over-stats">
       <div><b id="ovTime">0:00</b><i>生存時間</i></div>
       <div><b id="ovKills">0</b><i>撃破数</i></div>
+      <div><b id="ovLevel">1</b><i>到達Lv</i></div>
       <div><b id="ovDamage">0</b><i>総ダメージ</i></div>
+    </div>
+    <div class="over-meta">
+      <p>永続経験値 <b id="ovXp">+0</b></p>
+      <p id="ovLevelUp" class="over-levelup" hidden>アカウントレベルが <b id="ovAcct">2</b> に上がった！</p>
     </div>
     <button id="retryBtn" class="boot-btn">もう一度</button>
   </div>

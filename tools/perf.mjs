@@ -36,6 +36,9 @@ const r = await page.evaluate(async (LOAD) => {
   //   分離処理・当たり判定・AIがすべて最悪密度で回る状態を作る
   g.startRun();
   g.player.takeDamage = () => false;                       // 途中で死ぬと計測が止まる
+  // ★レベルアップ選択が開くと state が変わり update() が即returnして
+  //   「速い」という誤った計測値になる。計測中は選択画面を開かせない。
+  g._showLevelUp = () => { g.levels.pending = 0; };
   for (let ring = 0; ring < 5; ring++) g.spawner.spawnBurst(LOAD / 5, g.player, 3 + ring * 2.5);
   for (let i = 0; i < 60; i++) g.update(STEP);              // 配置を落ち着かせる
   const loaded = g.enemies.count;
@@ -68,12 +71,14 @@ const r = await page.evaluate(async (LOAD) => {
 
   const info = g.scene.renderer.info;
   return { parts, heapDelta: h1 - h0, measured: !!performance.memory, loaded,
+           state: g.state, runLv: g.levels.level, pickups: g.pickups.count,
            stillAlive: g.enemies.count, projs: g.projectiles.count,
            draws: g.scene.drawCalls, tris: info.render.triangles,
            geoms: info.memory.geometries, texs: info.memory.textures };
 }, LOAD_ENEMIES);
 
-console.log(`負荷シナリオ: 敵 ${r.loaded} 体を密集配置（計測終了時 ${r.stillAlive} 体 / 弾 ${r.projs} 発）`);
+console.log(`負荷シナリオ: 敵 ${r.loaded} 体を密集配置（計測終了時 ${r.stillAlive} 体 / 弾 ${r.projs} 発 / ジェム ${r.pickups} 個 / ランLv.${r.runLv}）`);
+console.log(`計測中の state: ${r.state}`);
 
 let total = 0;
 for (const [k, v] of Object.entries(r.parts)) {
@@ -94,6 +99,8 @@ if (totalMs > JS_BUDGET_MS) fails.push(`JSフレームコスト超過 (${totalMs
 if (r.measured && heapKb > HEAP_LIMIT_KB) fails.push(`ループ内アロケーション検出 (${heapKb.toFixed(1)} KB > ${HEAP_LIMIT_KB} KB)`);
 if (r.draws > 100) fails.push(`draw call 超過 (${r.draws} > 100)`);
 if (r.loaded < 100) fails.push(`負荷シナリオの敵数が不足 (${r.loaded} < 100)`);
+// ★state が playing でないと update() が素通りして計測が無意味になる
+if (r.state !== 'playing') fails.push(`計測中の state が playing ではない (${r.state})`);
 if (r.tris > 60000) fails.push(`三角形数 超過 (${r.tris} > 60000)`);
 if (errors.length) fails.push(`ページエラー: ${errors.join(' | ')}`);
 

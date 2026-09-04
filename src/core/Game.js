@@ -18,6 +18,12 @@ import { InstanceLayer } from '../scene/InstanceLayer.js';
 import { Player } from '../entities/Player.js';
 import { EnemyPool } from '../entities/Enemy.js';
 import { ProjectilePool } from '../entities/Projectile.js';
+import { PickupPool } from '../entities/Pickup.js';
+
+import { SaveManager } from '../save/SaveManager.js';
+import { MetaSystem } from '../progression/MetaSystem.js';
+import { SkillSystem } from '../progression/SkillSystem.js';
+import { LevelSystem } from '../progression/LevelSystem.js';
 
 import { SpatialGrid } from '../combat/Collision.js';
 import { CombatSystem } from '../combat/CombatSystem.js';
@@ -28,8 +34,11 @@ import { SpawnDirector } from '../combat/SpawnDirector.js';
 import { Input } from '../ui/Input.js';
 import { Hud } from '../ui/Hud.js';
 import { Screens } from '../ui/Screens.js';
+import { LevelUpUI } from '../ui/LevelUpUI.js';
 
-export const STATE = { PLAYING: 'playing', DEAD: 'dead' };
+import { SKILL_BY_ID } from '../data/skills.js';
+
+export const STATE = { PLAYING: 'playing', LEVELUP: 'levelup', DEAD: 'dead' };
 
 export class Game {
   /** @param {HTMLCanvasElement} canvas */
@@ -39,6 +48,10 @@ export class Game {
 
     this.events = new Events();
     this.rng = new RNG();
+
+    // ★セーブは最初に読む。永続強化がステータス計算の土台になる
+    this.save = new SaveManager();
+    this.meta = new MetaSystem(this.save);
 
     // ---- 描画 ----
     this.scene = new SceneManager(canvas, TIERS[initialTier].aa);
@@ -50,6 +63,7 @@ export class Game {
     this.player = new Player();
     this.enemies = new EnemyPool();
     this.projectiles = new ProjectilePool();
+    this.pickups = new PickupPool();
 
     // グリッドはアリーナより少し広く取る（境界の敵が端セルに集中しないように）
     this.grid = new SpatialGrid(this.arena.radius + 6, 4, this.enemies.cap);
@@ -66,8 +80,19 @@ export class Game {
       enemies: this.enemies, rng: this.rng, arenaRadius: this.arena.radius,
     });
 
+    // ---- 成長 ----
+    this.skills = new SkillSystem({
+      player: this.player, combat: this.combat, enemies: this.enemies,
+      grid: this.grid, rng: this.rng, metaBonus: () => this.meta.bonus(),
+    });
+    this.levels = new LevelSystem({
+      player: this.player, skills: this.skills, events: this.events,
+    });
+
     // 論理と描画をつなぐ層
-    this.instances = new InstanceLayer(this.scene.scene, this.enemies, this.projectiles);
+    this.instances = new InstanceLayer(
+      this.scene.scene, this.enemies, this.projectiles, this.pickups
+    );
 
     // ---- UI ----
     this.input = new Input(canvas, {
@@ -76,6 +101,7 @@ export class Game {
     });
     this.hud = new Hud();
     this.screens = new Screens(() => this.startRun());
+    this.levelUpUI = new LevelUpUI((id) => this._pickSkill(id));
 
     // 品質が変わったら描画側にまとめて反映する
     this.quality = new Quality((tier) => {
@@ -87,6 +113,7 @@ export class Game {
     this.state = STATE.PLAYING;
     this.frame = 0;
     this.elapsed = 0;
+    this.runGems = 0;
 
     this.playerView.setWeapon(this.weapons.weapon);
     this._wireEvents();
@@ -101,13 +128,56 @@ export class Game {
     // 被弾は必ず体で判るようにする。数値より画面が揺れる方が速く伝わる
     this.events.on(EV.PLAYER_HIT, () => this.cameraRig.shake(0.55));
 
+    // 倒した位置に経験値ジェムを落とす
+    this.events.on(EV.ENEMY_KILLED, (e, arch) => {
+      this.pickups.spawn(e.x, e.z, arch.reward.xp);
+      this.runGems += arch.reward.gems || 0;
+    });
+
+    this.events.on(EV.LEVEL_UP, () => this.cameraRig.shake(0.3));
+
     this.events.on(EV.PLAYER_DIED, () => {
       this.state = STATE.DEAD;
       this.cameraRig.shake(1.2);
+      this.levelUpUI.hide();          // 選択中に死んだ場合に残さない
+
+      // ★ラン終了の精算。ここで永続経験値が入り、即座に保存される
+      const res = this.meta.finishRun({
+        kills: this.combat.kills, elapsed: this.elapsed,
+        runLv: this.levels.level, gems: this.runGems,
+      });
+
       this.screens.showGameOver({
         elapsed: this.elapsed, kills: this.combat.kills, damage: this.combat.damageDealt,
+        runLv: this.levels.level,
+        xpGained: res.xpGained, levelsGained: res.levelsGained, newAccountLv: res.newLevel,
       });
     });
+  }
+
+  /** レベルアップ選択の確定。まだ残っていれば次の選択を出す。 */
+  _pickSkill(id) {
+    this.skills.take(id);
+    const more = this.levels.consume();
+    if (more) {
+      this._showLevelUp();
+    } else {
+      this.levelUpUI.hide();
+      this.state = STATE.PLAYING;
+    }
+  }
+
+  _showLevelUp() {
+    const choices = this.skills.roll();
+    if (choices.length === 0) {
+      // 全スキルが上限。選ばせるものが無いので素通しする
+      this.levels.pending = 0;
+      this.levelUpUI.hide();
+      this.state = STATE.PLAYING;
+      return;
+    }
+    this.state = STATE.LEVELUP;
+    this.levelUpUI.show(this.levels.level, choices);
   }
 
   start() {
@@ -122,9 +192,17 @@ export class Game {
     this.elapsed = 0;
     this.frame = 0;
 
+    this.runGems = 0;
+
+    // ★順序が重要：スキルを消す → ステータスを組み直す → その値でHPを決める
+    this.skills.reset();
+    this.levels.reset();
+    this.skills.recompute();
     this.player.reset();
+
     this.enemies.despawnAll();
     this.projectiles.despawnAll();
+    this.pickups.despawnAll();
     this.grid.clear();
 
     this.combat.reset();
@@ -132,6 +210,7 @@ export class Game {
     this.autoAim.reset();
     this.weapons.reset();
     this.cameraRig.reset();
+    this.levelUpUI.hide();
 
     this.events.emit(EV.RUN_STARTED);
   }
@@ -180,7 +259,14 @@ export class Game {
     this.combat.resolveProjectiles();
     this.combat.resolveContact(this.player);
 
-    // 7. 湧き
+    // 7. スキル（アクティブの発動）
+    this.skills.update(dt);
+
+    // 8. 経験値の回収 → レベルアップ判定
+    const xp = this.pickups.update(dt, this.player);
+    if (xp > 0 && this.levels.gain(xp)) this._showLevelUp();
+
+    // 9. 湧き
     this.spawner.tick(dt, this.player);
   }
 
@@ -195,8 +281,22 @@ export class Game {
 
     this.quality.sample(dt);
     this.hud.syncHp(this.player.hp, this.player.maxHp);
+    this.hud.syncLevel(this.levels.level, this.levels.xp01);
+    this.hud.syncSkills(this._skillChips());
+    this.hud.syncAccount(this.meta.level);
     this.hud.syncRun(this.elapsed, this.combat.kills);
     this.hud.syncDebug(dt, this.quality.name, this.scene.drawCalls, this.enemies.count);
     if (this.input.isActive) this.hud.dismissHint();
+  }
+
+  /** HUDのスキルチップ用。中身が変わらなければHUD側でDOM更新を握り潰す。 */
+  _skillChips() {
+    const out = this._chipBuf || (this._chipBuf = []);
+    out.length = 0;
+    for (const [id, lv] of this.skills.levels) {
+      const sk = SKILL_BY_ID.get(id);
+      if (sk) out.push({ icon: sk.icon, lv, name: sk.name });
+    }
+    return out;
   }
 }

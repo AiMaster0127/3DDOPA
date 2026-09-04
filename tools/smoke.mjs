@@ -91,13 +91,17 @@ check(moved > 0.5, '入力で自機が移動する', `${moved.toFixed(2)} ユニ
 check(Math.abs(st.camX - st.x) < 3, 'カメラが自機に追従する', `camX=${st.camX.toFixed(2)} / playerX=${st.x.toFixed(2)}`);
 
 // ---- 壁：場外に出られないか ----
+// ★レベルアップ選択中は update() が止まる（仕様）。
+//   startRun() で確実に PLAYING に戻してから測らないと、動かないのを壁のせいと誤認する。
 const clamp = await page.evaluate(async () => {
   const g = __DOPA.game;
+  g.startRun();
   g.player.x = 500; g.player.z = 500;
   await new Promise(r => setTimeout(r, 300));
-  return { r: Math.hypot(g.player.x, g.player.z), arena: g.arena.radius };
+  return { r: Math.hypot(g.player.x, g.player.z), arena: g.arena.radius, state: g.state };
 });
-check(clamp.r <= clamp.arena, 'アリーナ外に出られない', `半径 ${clamp.r.toFixed(2)} <= ${clamp.arena}`);
+check(clamp.r <= clamp.arena, 'アリーナ外に出られない',
+      `半径 ${clamp.r.toFixed(2)} <= ${clamp.arena} (state=${clamp.state})`);
 
 // ---- 戦闘コア（フェーズ2） ----
 // 湧きを待つと運任せになるので、自機の周りに決め打ちで配置して検証する
@@ -160,6 +164,93 @@ check(fight.death.dead && fight.death.state === 'dead' && fight.death.over,
 check(fight.retry.state === 'playing' && fight.retry.kills === 0 && fight.retry.projs === 0 &&
       fight.retry.elapsed < 1 && fight.retry.over,
       '再挑戦でランが初期化される', JSON.stringify(fight.retry));
+
+// ---- 成長（フェーズ3） ----
+const prog = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const out = {};
+
+  g.startRun();
+  g.equip('wp_iron_sword');
+  g.player.takeDamage = () => false;
+  const lv0 = g.levels.level;
+
+  // 敵を倒す → ジェムが落ちる → 吸い寄せて回収 → レベルアップ
+  g.spawner.spawnBurst(30, g.player, 2.6);
+  let sawGems = 0;
+  for (let i = 0; i < 40; i++) {
+    await wait(100);
+    sawGems = Math.max(sawGems, g.pickups.count);
+    if (g.state === 'levelup') break;
+  }
+  out.chain = { lv0, lv: g.levels.level, sawGems, kills: g.combat.kills,
+                state: g.state, uiVisible: !document.getElementById('levelup').hidden,
+                cards: document.querySelectorAll('.lv-card').length };
+
+  // カードを押すと確定してゲームが再開するか
+  document.querySelector('.lv-card')?.click();
+  await wait(250);
+  out.pick = { state: g.state, skillCount: g.skills.levels.size,
+               uiHidden: document.getElementById('levelup').hidden };
+
+  // ★パッシブとアクティブは効き方が違うので別々に確かめる。
+  //   3択はランダムなので、ここは特定のスキルを直接習得させて決定的に検証する。
+  const atk0 = g.player.stats.atkPct;
+  g.skills.take('sk_power');
+  out.passive = { before: +atk0.toFixed(4), after: +g.player.stats.atkPct.toFixed(4) };
+
+  // アクティブ：武器の射程外・スキルの射程内に敵を固めて、武器と混ざらないようにする
+  g.startRun();
+  g.player.takeDamage = () => false;
+  g.equip('wp_iron_sword');                 // 射程3.1（+敵半径0.55 = 3.65まで）
+  g.skills.take('sk_nova');                 // 半径4.9
+  g.spawner.spawnBurst(12, g.player, 4.2);
+  for (const e of g.enemies.list) if (e.active) e.speed = 0;   // 近寄らせない
+  const dmg0 = g.combat.damageDealt;
+  await wait(1400);                         // ノヴァの初回は0.6秒後
+  out.active = { dmg: g.combat.damageDealt - dmg0,
+                 weaponTarget: !!g.autoAim.target };
+  return out;
+});
+
+check(prog.chain.lv > prog.chain.lv0 && prog.chain.sawGems > 0,
+      '撃破→経験値ジェム→回収→レベルアップ',
+      `撃破 ${prog.chain.kills} / ジェム最大 ${prog.chain.sawGems} 個 / Lv.${prog.chain.lv0}→Lv.${prog.chain.lv}`);
+check(prog.chain.state === 'levelup' && prog.chain.uiVisible && prog.chain.cards >= 2,
+      'レベルアップでゲームが止まり選択肢が出る',
+      `state=${prog.chain.state} / カード ${prog.chain.cards} 枚`);
+check(prog.pick.skillCount > 0 && prog.pick.state === 'playing' && prog.pick.uiHidden,
+      'スキルを選ぶとゲームが再開する',
+      `習得 ${prog.pick.skillCount} 個 / state=${prog.pick.state}`);
+check(prog.passive.after > prog.passive.before,
+      'パッシブスキルがステータスに乗る',
+      `攻撃力補正 +${(prog.passive.before * 100).toFixed(1)}% → +${(prog.passive.after * 100).toFixed(1)}%`);
+check(prog.active.dmg > 0 && !prog.active.weaponTarget,
+      'アクティブスキルが自動でダメージを出す',
+      `武器の射程外でノヴァのみ ${prog.active.dmg} ダメージ（武器のターゲット: ${prog.active.weaponTarget}）`);
+
+// ---- 永続保存（リロードを跨ぐか） ----
+const beforeReload = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  g.meta.meta.accountXp = 0;
+  g.meta.meta.accountLv = 1;
+  const res = g.meta.finishRun({ kills: 500, elapsed: 300, runLv: 12, gems: 77 });
+  return { lv: g.meta.level, xp: g.meta.xp, gems: g.save.data.wallet.gems, res };
+});
+await page.reload({ waitUntil: 'load' });
+await page.click('#startBtn');
+await page.waitForTimeout(400);
+const afterReload = await page.evaluate(() => {
+  const g = __DOPA.game;
+  return { lv: g.meta.level, xp: g.meta.xp, gems: g.save.data.wallet.gems,
+           runs: g.save.data.stats.totalRuns, kills: g.save.data.stats.totalKills,
+           bonusAtk: +g.meta.bonus().atkPct.toFixed(4) };
+});
+check(afterReload.lv === beforeReload.lv && afterReload.gems === beforeReload.gems &&
+      afterReload.lv > 1,
+      'リロードしても永続進行が残る',
+      `Lv.${beforeReload.lv}→Lv.${afterReload.lv} / ジェム ${afterReload.gems} / 累計ラン ${afterReload.runs} / 永続攻撃補正 +${(afterReload.bonusAtk * 100).toFixed(1)}%`);
 
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);

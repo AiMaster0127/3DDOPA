@@ -51,4 +51,6 @@ export const EV = {
   PLAYER_HIT:    'player:hit',      // (amount)
   PLAYER_DIED:   'player:died',     // ()
   RUN_STARTED:   'run:started',     // ()
+  LEVEL_UP:      'run:levelup',     // (newLevel)
+  XP_GAINED:     'run:xp',          // (amount)
 };

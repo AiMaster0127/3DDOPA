@@ -33,8 +33,13 @@ export class Player {
     this.swing = 0;       // 近接攻撃モーションの残り秒数（描画が参照）
     this.swingDur = 0.001;
 
-    // フェーズ3以降で成長値が乗る器。今は素の値のまま
-    this.stats = { maxHpPct: 0, atkPct: 0, speedPct: 0, critAdd: 0 };
+    this.runLv = 1;       // ラン内レベル（LevelSystem が書く）
+
+    // ★成長値の器。SkillSystem.recompute() が毎回ゼロから組み直す
+    this.stats = {
+      maxHpPct: 0, atkPct: 0, speedPct: 0,
+      critAdd: 0, rateAdd: 0, pickupPct: 0, drAdd: 0,
+    };
   }
 
   /** ランの開始時に呼ぶ。 */
@@ -48,6 +53,7 @@ export class Player {
     this.iframe = 0;
     this.swing = 0;
     this.speed01 = 0;
+    this.runLv = 1;
   }
 
   /**
@@ -56,7 +62,9 @@ export class Player {
    */
   takeDamage(amount) {
     if (this.dead || this.iframe > 0) return false;
-    this.hp -= amount;
+    // 被ダメージ軽減は上限80%。無敵化させない
+    const dr = this.stats.drAdd > 0.8 ? 0.8 : this.stats.drAdd;
+    this.hp -= Math.max(1, Math.round(amount * (1 - dr)));
     this.iframe = BALANCE.combatPlayer.iframe;
     if (this.hp <= 0) { this.hp = 0; this.dead = true; }
     return true;

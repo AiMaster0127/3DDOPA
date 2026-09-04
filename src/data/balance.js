@@ -64,10 +64,39 @@ export const BALANCE = {
     ],
   },
 
+  /** ラン内のレベル（roguelite的な一時成長。ラン終了で失われる） */
+  runLevel: {
+    // 必要経験値。二乗より緩く、線形より重い曲線
+    xpFor: lv => Math.floor(9 * Math.pow(lv, 1.42) + 5 * lv),
+    // レベルアップごとの素の伸び（スキルとは別に必ず貰える）
+    perLevel: { maxHp: 7, atkPct: 0.025, speedPct: 0.006, critAdd: 0.003 },
+    skillChoices: 3,     // 提示する選択肢の数
+    maxLevel: 60,
+  },
+
+  /** 永続レベル（ラン跨ぎで育つ。ここが「キャラの成長」） */
+  accountLevel: {
+    xpFor: lv => Math.floor(140 * Math.pow(lv, 1.55)),
+    perLevel: { maxHpPct: 0.02, atkPct: 0.015 },
+    maxLevel: 99,
+    // ラン成績 → 永続経験値。撃破数が主、生存時間が従
+    xpFromRun: ({ kills, elapsed, runLv }) =>
+      Math.floor(kills * 2 + elapsed * 0.6 + runLv * 8),
+  },
+
+  /** 経験値ジェム */
+  pickup: {
+    baseRange: 2.4,      // 吸い寄せが始まる距離
+    collectRange: 0.9,   // 回収される距離
+    attract: 26,         // 吸い寄せの加速度
+    life: 25,            // 放置された場合に消えるまでの秒数
+  },
+
   /** プール容量。起動時に確保し、ゲーム中は new しない */
   pools: {
     enemies: 320,
     projectiles: 420,
+    pickups: 400,
   },
 
   /** カメラ追従 */

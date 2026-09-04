@@ -17,10 +17,16 @@ export class Hud {
     this.elHpText = document.getElementById('hpText');
     this.elTime = document.getElementById('timeVal');
     this.elKills = document.getElementById('killVal');
+    this.elAcct = document.getElementById('acctVal');
+
+    this.elRunLv = document.getElementById('runLv');
+    this.elXpFill = document.getElementById('xpFill');
+    this.elChips = document.getElementById('skillChips');
 
     this._fps = -1; this._tier = ''; this._draws = -1; this._enemies = -1;
     this._hp = -1; this._maxHp = -1; this._hpClass = '';
-    this._time = -1; this._kills = -1;
+    this._time = -1; this._kills = -1; this._acct = -1;
+    this._runLv = -1; this._xp01 = -1; this._chipKey = '';
 
     // fpsは瞬間値だと読めないので0.25秒ぶんを平均する
     this._acc = 0; this._frames = 0;
@@ -51,6 +57,39 @@ export class Hud {
       this.elHpFill.className = `hp-fill${cls ? ' ' + cls : ''}`;
       this._hpClass = cls;
     }
+  }
+
+  /** ランレベルと経験値バー。 */
+  syncLevel(level, xp01) {
+    if (level !== this._runLv) { this._runLv = level; this.elRunLv.textContent = `Lv.${level}`; }
+    // 0.5%刻みでしか書かない。毎フレームstyleを触るとレイアウトが走る
+    const q = Math.round(xp01 * 200);
+    if (q !== this._xp01) { this._xp01 = q; this.elXpFill.style.width = `${(q / 2).toFixed(1)}%`; }
+  }
+
+  /** 習得済みスキルのチップ。中身が変わったときだけ作り直す。 */
+  syncSkills(entries) {
+    const key = entries.map(e => `${e.icon}${e.lv}`).join('|');
+    if (key === this._chipKey) return;
+    this._chipKey = key;
+
+    this.elChips.replaceChildren();
+    for (const e of entries) {
+      const el = document.createElement('span');
+      el.className = 'skill-chip';
+      el.append(document.createTextNode(e.icon));
+      const b = document.createElement('b');
+      b.textContent = e.lv;
+      el.appendChild(b);
+      el.title = e.name;
+      this.elChips.appendChild(el);
+    }
+  }
+
+  syncAccount(level) {
+    if (level === this._acct) return;
+    this._acct = level;
+    this.elAcct.textContent = `Lv.${level}`;
   }
 
   syncRun(elapsedSec, kills) {
