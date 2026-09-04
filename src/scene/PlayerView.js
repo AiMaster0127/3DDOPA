@@ -7,6 +7,8 @@
 import * as THREE from '../../vendor/three/three.module.min.js';
 import { BALANCE } from '../data/balance.js';
 import { lerp, wrapAngle, damp } from '../core/math.js';
+import { withRim, makeGlowSprite } from './materials.js';
+import { makeGlowTexture, makeBlobTexture } from './textures.js';
 
 const ACCENT = 0x43e8ff;
 const ACCENT2 = 0xff3ea5;
@@ -22,10 +24,10 @@ export class PlayerView {
 
     // ★床が濃紺なので、自機は「ほぼ白 + 発光アクセント」にして最大コントラストを取る。
     //   青系にすると床に溶けて、乱戦時に自分を見失う。
-    this.torsoMat = new THREE.MeshStandardMaterial({
+    this.torsoMat = withRim(new THREE.MeshStandardMaterial({
       color: 0xe4ebf7, roughness: 0.42, metalness: 0.25,
       emissive: 0xff2b2b, emissiveIntensity: 0,      // 被弾時だけ光らせる
-    });
+    }), { color: 0x9fd8ff, power: 2.6, strength: 0.85 });
     const torso = new THREE.Mesh(
       new THREE.CapsuleGeometry(p.radius, p.height * 0.5, 4, 12), this.torsoMat
     );
@@ -58,7 +60,10 @@ export class PlayerView {
     // 武器。フェーズ4で装備中の武器データに応じて色・形を差し替える
     this.weaponPivot = new THREE.Group();             // 振り回すための回転軸
     this.weaponPivot.position.y = p.height * 0.55;
-    this.weaponMat = new THREE.MeshStandardMaterial({ color: 0xc9d4e2, roughness: 0.3, metalness: 0.65 });
+    this.weaponMat = withRim(
+      new THREE.MeshStandardMaterial({ color: 0xc9d4e2, roughness: 0.3, metalness: 0.65 }),
+      { color: 0xbfe8ff, power: 2.2, strength: 0.9 }
+    );
     this.weapon = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.3), this.weaponMat);
     this.weapon.position.set(p.radius + 0.14, 0, 0.15);
     this.weapon.rotation.x = -0.28;
@@ -84,18 +89,65 @@ export class PlayerView {
     this.blob.visible = false;
     this.group.add(this.blob);
 
-    // ★足元の発光リング。敵が群がったときに「自分がどこか」を保証する。
-    //   加算合成なので暗い床の上でだけ光り、明るい場所では目立ちすぎない
+    // ★足元の発光。敵が群がったときに「自分がどこか」を保証する。
+    //   単なるリングより、中心が明るく外へ滲む板の方が「立っている」感じが出る。
+    this.glowTex = makeGlowTexture(128, 0.0);
     this.aura = new THREE.Mesh(
-      new THREE.RingGeometry(p.radius * 1.15, p.radius * 1.75, 28),
+      new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({
-        color: ACCENT, transparent: true, opacity: 0.55,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+        map: this.glowTex, color: ACCENT, transparent: true, opacity: 0.55,
+        blending: THREE.AdditiveBlending, depthWrite: false,
       })
     );
     this.aura.rotation.x = -Math.PI / 2;
     this.aura.position.y = 0.05;
+    this.aura.scale.setScalar(p.radius * 9);
     this.group.add(this.aura);
+
+    // 足元を締める細いリング。滲みだけだと輪郭が無く締まらない
+    this.auraRing = new THREE.Mesh(
+      new THREE.RingGeometry(p.radius * 1.5, p.radius * 1.72, 40),
+      new THREE.MeshBasicMaterial({
+        color: ACCENT, transparent: true, opacity: 0.7,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      })
+    );
+    this.auraRing.rotation.x = -Math.PI / 2;
+    this.auraRing.position.y = 0.06;
+    this.group.add(this.auraRing);
+
+    // ★足元に向きの三角を描く。見下ろしでは、体の傾きより
+    //   床に落ちた印の方が速く読める（乱戦で特に効く）。
+    const arrowShape = new THREE.BufferGeometry();
+    arrowShape.setAttribute('position', new THREE.Float32BufferAttribute([
+      0, 0, 1.15,  -0.42, 0, 0.35,   0.42, 0, 0.35,
+    ], 3));
+    arrowShape.computeVertexNormals();
+    this.dirMat = new THREE.MeshBasicMaterial({
+      color: ACCENT, transparent: true, opacity: 0.75,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.dirMark = new THREE.Mesh(arrowShape, this.dirMat);
+    this.dirMark.position.y = 0.07;
+    this.dirMark.scale.setScalar(1.35);
+    this.group.add(this.dirMark);
+
+    // 外側にもう一枚、薄く広いリング。存在感の底上げ
+    this.auraOuter = new THREE.Mesh(
+      new THREE.RingGeometry(p.radius * 2.6, p.radius * 2.78, 48),
+      new THREE.MeshBasicMaterial({
+        color: ACCENT, transparent: true, opacity: 0.3,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      })
+    );
+    this.auraOuter.rotation.x = -Math.PI / 2;
+    this.auraOuter.position.y = 0.055;
+    this.group.add(this.auraOuter);
+
+    // 胸のコアの光。自機の位置を点で示す
+    this.coreGlow = makeGlowSprite(this.glowTex, ACCENT, 2.1, 0.85);
+    this.coreGlow.position.set(0, p.height * 0.66, 0);
+    this.group.add(this.coreGlow);
 
     // ★近接攻撃の斬撃範囲。装飾ではなく「どこまで届くか」を示す機能。
     //   これが無いと近接武器の間合いが体で覚えられない
@@ -126,6 +178,10 @@ export class PlayerView {
     this.noseMat.color.setHex(v.nose);
     this.noseMat.emissive.setHex(v.nose);
     this.aura.material.color.setHex(v.accent);
+    this.auraRing.material.color.setHex(v.accent);
+    this.auraOuter.material.color.setHex(v.accent);
+    this.dirMat.color.setHex(v.accent);
+    this.coreGlow.material.color.setHex(v.accent);
     this.arcMat.color.setHex(v.accent);
   }
 
@@ -174,7 +230,15 @@ export class PlayerView {
     this.body.rotation.x = damp(this.body.rotation.x, player.speed01 * 0.13, 9, dt);
 
     // 走行中だけオーラを強める（速度のフィードバック）
-    this.aura.material.opacity = 0.4 + player.speed01 * 0.35;
+    this.aura.material.opacity = 0.42 + player.speed01 * 0.34;
+    this.auraRing.material.opacity = 0.55 + player.speed01 * 0.4;
+    this.coreGlow.material.opacity = 0.7 + player.speed01 * 0.3;
+
+    // 外周リングはゆっくり脈打たせる。静止していても「生きている」感じが出る
+    this._pulse = (this._pulse || 0) + dt;
+    this.auraOuter.material.opacity = 0.22 + Math.sin(this._pulse * 2.4) * 0.10;
+    this.auraOuter.scale.setScalar(1 + Math.sin(this._pulse * 2.4) * 0.06);
+    this.dirMat.opacity = 0.55 + player.speed01 * 0.35;
 
     // ---- 近接の振り。swing は 武器のlife秒 → 0 へ落ちる ----
     const t = player.swing > 0 ? player.swing / player.swingDur : 0;   // 1→0
@@ -194,19 +258,9 @@ export class PlayerView {
     // ---- 死亡：倒れる ----
     this.body.rotation.z = damp(this.body.rotation.z, player.dead ? Math.PI * 0.42 : 0, 6, dt);
     this.aura.visible = !player.dead;
+    this.auraRing.visible = !player.dead;
+    this.auraOuter.visible = !player.dead;
+    this.dirMark.visible = !player.dead;
+    this.coreGlow.visible = !player.dead;
   }
-}
-
-/** 中心が濃く外周が透ける円のテクスチャ。簡易影に使う。 */
-function makeBlobTexture(size = 64) {
-  const cv = document.createElement('canvas');
-  cv.width = cv.height = size;
-  const g = cv.getContext('2d');
-  const grad = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  grad.addColorStop(0.0, 'rgba(255,255,255,1)');
-  grad.addColorStop(0.55, 'rgba(255,255,255,0.55)');
-  grad.addColorStop(1.0, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, size, size);
-  return new THREE.CanvasTexture(cv);
 }

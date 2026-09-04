@@ -9,7 +9,7 @@ export const BALANCE = {
     radius: 34,          // 円形闘技場の半径（m相当）
     wallHeight: 3.2,
     wallCount: 64,       // 外周ブロックの個数
-    decorCount: 46,      // 内部の装飾（岩・柱）
+    decorCount: 34,      // 内部の装飾（柱）。多すぎると視界を塞ぐだけになる
   },
 
   /** 自機の移動特性 */

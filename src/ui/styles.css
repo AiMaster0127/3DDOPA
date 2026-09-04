@@ -10,6 +10,13 @@
   --stroke:  rgba(120, 150, 255, 0.22);
   --safe-b:  env(safe-area-inset-bottom, 0px);
   --safe-t:  env(safe-area-inset-top, 0px);
+
+  /* ★面の作りを1箇所にまとめる。各所で個別に指定すると統一感が崩れる */
+  --glass:   linear-gradient(155deg, rgba(30, 36, 76, .72), rgba(10, 12, 30, .82));
+  --edge:    rgba(120, 160, 255, .28);
+  --edge-hi: rgba(150, 220, 255, .72);
+  /* 隅を斜めに落とす。SF的な「機材」の質感が一気に出る */
+  --notch:   polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -41,10 +48,10 @@ html, body {
 
 .stat-panel {
   display: inline-flex; gap: 14px; align-items: flex-end;
-  background: var(--panel);
-  border: 1px solid var(--stroke);
-  border-radius: 10px;
-  padding: 6px 12px;
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  clip-path: var(--notch);
+  padding: 6px 14px;
   backdrop-filter: blur(6px);
   font-variant-numeric: tabular-nums;
 }
@@ -59,20 +66,28 @@ html, body {
 /* ===== HPバー ===== */
 .hp { display: flex; flex-direction: column; gap: 3px; }
 .hp-bar {
-  width: min(46vw, 240px); height: 12px;
-  background: rgba(8, 10, 22, .72);
-  border: 1px solid var(--stroke);
-  border-radius: 999px;
+  position: relative;
+  width: min(46vw, 240px); height: 13px;
+  background: rgba(6, 8, 18, .82);
+  border: 1px solid var(--edge);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
   overflow: hidden;
+}
+/* ★目盛りを刻む。連続したバーより「どれだけ減ったか」が掴みやすい */
+.hp-bar::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(90deg,
+    transparent 0 11px, rgba(4, 6, 16, .85) 11px 13px);
 }
 .hp-fill {
   display: block; height: 100%; width: 100%;
-  background: linear-gradient(90deg, #38f5a8, #43e8ff);
+  background: linear-gradient(90deg, #2ee89b, #43e8ff);
+  box-shadow: 0 0 12px rgba(67, 232, 255, .55);
   /* ★幅はJSが毎フレーム書くのでtransitionは短く。長いと実HPとズレて見える */
   transition: width .12s linear, background .3s ease;
 }
-.hp-fill.low  { background: linear-gradient(90deg, #ffb648, #ff7a3c); }
-.hp-fill.crit { background: linear-gradient(90deg, #ff4d6d, #ff2b2b); }
+.hp-fill.low  { background: linear-gradient(90deg, #ffb648, #ff7a3c); box-shadow: 0 0 12px rgba(255, 150, 60, .55); }
+.hp-fill.crit { background: linear-gradient(90deg, #ff4d6d, #ff2b2b); box-shadow: 0 0 16px rgba(255, 60, 90, .7); }
 .hp-text { font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
 
 /* ===== 経験値バー ===== */
@@ -104,9 +119,11 @@ html, body {
 /* ===== 経過時間・撃破数 ===== */
 .run-stat {
   display: flex; align-items: baseline; gap: 6px;
-  background: var(--panel); border: 1px solid var(--stroke);
-  border-radius: 8px; padding: 3px 10px;
+  background: var(--glass); border: 1px solid var(--edge);
+  clip-path: var(--notch);
+  padding: 4px 12px;
   font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(6px);
 }
 .run-stat b { font-size: 16px; font-weight: 700; color: var(--ink); }
 .run-stat i { font-size: 9px; font-style: normal; color: var(--dim); letter-spacing: .08em; }
@@ -160,13 +177,16 @@ html, body {
 .boot-msg.error { color: #ff6b6b; max-width: 30em; text-align: center; line-height: 1.7; white-space: pre-line; }
 
 .boot-btn {
-  margin-top: 8px; padding: 13px 40px;
-  font: inherit; font-size: 16px; font-weight: 700; letter-spacing: .12em;
+  margin-top: 8px; padding: 14px 44px;
+  font: inherit; font-size: 16px; font-weight: 800; letter-spacing: .18em;
   color: #04121a; cursor: pointer;
-  background: linear-gradient(135deg, #43e8ff, #b06bff);
-  border: 0; border-radius: 999px;
-  box-shadow: 0 0 26px rgba(67, 232, 255, .45);
+  background: linear-gradient(135deg, #4df0ff, #a865ff);
+  border: 1px solid rgba(200, 240, 255, .6);
+  clip-path: var(--notch);
+  box-shadow: 0 0 30px rgba(67, 232, 255, .5), inset 0 1px 0 rgba(255, 255, 255, .5);
+  transition: box-shadow .15s ease, transform .12s ease;
 }
+.boot-btn:hover { box-shadow: 0 0 44px rgba(67, 232, 255, .7), inset 0 1px 0 rgba(255,255,255,.55); }
 .boot-btn[hidden] { display: none; }
 .boot-btn:active { transform: scale(.96); }
 
@@ -251,7 +271,11 @@ html, body {
 .home, .panel {
   position: fixed; inset: 0; z-index: 7;
   display: flex; flex-direction: column;
-  background: radial-gradient(ellipse at 50% 30%, #16173a 0%, var(--bg) 72%);
+  /* ★平坦な単色は安っぽい。細いグリッドを敷いて「基地の床」に見せる */
+  background:
+    repeating-linear-gradient(0deg, transparent 0 39px, rgba(90, 140, 255, .045) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgba(90, 140, 255, .045) 39px 40px),
+    radial-gradient(ellipse at 50% 28%, #191a42 0%, #080912 74%);
   padding: calc(12px + var(--safe-t)) 14px calc(14px + var(--safe-b));
   overflow-y: auto; overscroll-behavior: contain;
 }
@@ -263,9 +287,9 @@ html, body {
 }
 .wallet { display: flex; gap: 10px; }
 .w-item {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: var(--panel); border: 1px solid var(--stroke);
-  border-radius: 999px; padding: 4px 11px; font-size: 12px;
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--glass); border: 1px solid var(--edge);
+  clip-path: var(--notch); padding: 5px 13px; font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 .w-item b { color: var(--accent); }
@@ -277,8 +301,11 @@ html, body {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
 }
 .home-title {
-  font-size: clamp(34px, 11vw, 74px); font-weight: 900; line-height: .95; letter-spacing: .03em;
-  text-align: center; text-shadow: 0 0 28px rgba(67, 232, 255, .4);
+  font-size: clamp(34px, 11vw, 74px); font-weight: 900; line-height: .92; letter-spacing: .06em;
+  text-align: center;
+  background: linear-gradient(180deg, #ffffff 30%, #9fd0ff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 26px rgba(67, 232, 255, .45));
 }
 .home-title span { display: block; color: var(--accent2); text-shadow: 0 0 28px rgba(255, 62, 165, .5); }
 .home-equip { font-size: 13px; color: var(--dim); }
@@ -286,23 +313,40 @@ html, body {
 .home-best { font-size: 11px; color: var(--dim); text-align: center; line-height: 1.8; }
 
 .home-btn {
-  padding: 12px 26px; min-width: 128px;
+  position: relative;
+  padding: 13px 28px; min-width: 132px;
   display: inline-flex; flex-direction: column; align-items: center; gap: 2px;
-  font: inherit; font-size: 15px; font-weight: 700; letter-spacing: .06em;
+  font: inherit; font-size: 15px; font-weight: 700; letter-spacing: .08em;
   color: var(--ink); cursor: pointer;
-  background: rgba(30, 34, 72, .9);
-  border: 1px solid rgba(120, 150, 255, .34); border-radius: 12px;
-  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+  background: var(--glass);
+  border: 1px solid var(--edge);
+  clip-path: var(--notch);
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease, background .12s ease;
+}
+/* 上端に細い光。板が「点いている」感じになる */
+.home-btn::before {
+  content: ''; position: absolute; left: 12px; right: 12px; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--edge-hi), transparent);
+  opacity: .7;
 }
 .home-btn small { font-size: 10px; font-weight: 500; color: var(--dim); letter-spacing: 0; }
 .home-btn:hover:not(:disabled), .home-btn:focus-visible:not(:disabled) {
-  border-color: var(--accent); box-shadow: 0 0 20px rgba(67, 232, 255, .26); outline: none;
+  border-color: var(--accent);
+  background: linear-gradient(155deg, rgba(44, 58, 110, .82), rgba(14, 18, 40, .88));
+  box-shadow: 0 0 24px rgba(67, 232, 255, .3); outline: none;
+  transform: translateY(-1px);
 }
 .home-btn:active:not(:disabled) { transform: scale(.97); }
 .home-btn:disabled { opacity: .4; cursor: not-allowed; }
 .home-btn.primary {
-  background: linear-gradient(135deg, #43e8ff, #b06bff);
-  color: #04121a; border: 0; box-shadow: 0 0 24px rgba(67, 232, 255, .38);
+  background: linear-gradient(135deg, #4df0ff, #a865ff);
+  color: #04121a; border: 1px solid rgba(200, 240, 255, .6);
+  box-shadow: 0 0 28px rgba(67, 232, 255, .45), inset 0 1px 0 rgba(255, 255, 255, .45);
+}
+.home-btn.primary::before { background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); }
+.home-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #6ef5ff, #bb7bff);
+  box-shadow: 0 0 38px rgba(67, 232, 255, .6), inset 0 1px 0 rgba(255, 255, 255, .5);
 }
 .home-btn.primary small { color: rgba(4, 18, 26, .72); }
 .home-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }

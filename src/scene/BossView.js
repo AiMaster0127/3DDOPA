@@ -7,6 +7,7 @@
  */
 import * as THREE from '../../vendor/three/three.module.min.js';
 import { lerp, wrapAngle, damp } from '../core/math.js';
+import { withRim } from './materials.js';
 
 const WINDUP_COLOR = new THREE.Color(0xffdd55);
 const DASH_COLOR = new THREE.Color(0xff3b3b);
@@ -24,10 +25,10 @@ export class BossView {
 
     this.baseColor = new THREE.Color(0x8b1a1a);
 
-    this.mat = new THREE.MeshStandardMaterial({
+    this.mat = withRim(new THREE.MeshStandardMaterial({
       color: 0x8b1a1a, roughness: 0.5, metalness: 0.25,
       emissive: 0x000000, emissiveIntensity: 0,
-    });
+    }), { color: 0xffb090, power: 2.2, strength: 1.0 });
 
     // 胴・頭・角。プリミティブの合成だけで「大きくて怖い」を作る
     this.body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.5, 1.9), this.mat);
@@ -38,7 +39,10 @@ export class BossView {
     this.head.position.set(0, 1.5, 1.2);
     this.head.castShadow = true;
 
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0xf0e6d0, roughness: 0.6 });
+    const hornMat = withRim(
+      new THREE.MeshStandardMaterial({ color: 0xf0e6d0, roughness: 0.6 }),
+      { color: 0xfff0d0, power: 2.0, strength: 1.1 }
+    );
     const hornGeo = new THREE.ConeGeometry(0.17, 0.9, 6);
     for (const sx of [-1, 1]) {
       const h = new THREE.Mesh(hornGeo, hornMat);

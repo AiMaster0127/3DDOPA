@@ -15,7 +15,7 @@ export const ENEMIES = [
     ai: 'chase',
     element: 'none',
     resist: { fire: -0.25, ice: 0.20 },      // 正=耐性 / 負=弱点
-    visual: { geom: 'sphere', color: 0x5ed17f, scale: 1.0 },
+    visual: { geom: 'sphere', color: 0x2fbf6a, scale: 1.0, glow: 0x7dffb0 },
   },
   {
     id: 'en_bat', name: 'ケイブバット', tier: 1,
@@ -24,7 +24,7 @@ export const ENEMIES = [
     ai: 'strafe',                            // 直進せず回り込む。囲まれる圧を作る
     element: 'none',
     resist: { thunder: -0.30 },
-    visual: { geom: 'octa', color: 0xa878e8, scale: 0.95, hover: 0.75 },   // 飛行。浮かせて区別する
+    visual: { geom: 'octa', color: 0x7a3fd8, scale: 0.95, hover: 0.75, glow: 0xc59bff }, // 飛行。浮かせて区別する
   },
   {
     id: 'en_brute', name: 'ブルート', tier: 2,
@@ -33,7 +33,7 @@ export const ENEMIES = [
     ai: 'chase',
     element: 'none',
     resist: { ice: -0.25, dark: 0.25 },
-    visual: { geom: 'box', color: 0xd9564e, scale: 1.0 },
+    visual: { geom: 'box', color: 0xb8261f, scale: 1.0, glow: 0xff7a5e },
   },
 
   {
@@ -44,7 +44,7 @@ export const ENEMIES = [
     shoot: { range: 13, cd: 2.2, speed: 15, dmg: 9, radius: 0.34, keep: 8.5 },
     element: 'none',
     resist: { fire: -0.2 },
-    visual: { geom: 'cone', color: 0xffb648, scale: 0.95 },
+    visual: { geom: 'cone', color: 0xff8c14, scale: 0.95, glow: 0xffd98a },
   },
   {
     id: 'en_charger', name: 'チャージャー', tier: 2,
@@ -54,7 +54,7 @@ export const ENEMIES = [
     charge: { windup: 0.7, dash: 0.45, speedMul: 5.2, cd: 2.4, range: 11 },
     element: 'none',
     resist: { ice: -0.3 },
-    visual: { geom: 'box', color: 0xff6a8a, scale: 0.95 },
+    visual: { geom: 'box', color: 0xe81d55, scale: 0.95, glow: 0xff8fb0 },
   },
   {
     id: 'en_blob', name: 'ブロブ', tier: 2,
@@ -64,7 +64,7 @@ export const ENEMIES = [
     split: { id: 'en_blobling', count: 2 },  // 倒すと分裂する
     element: 'none',
     resist: { dark: 0.25 },
-    visual: { geom: 'sphere', color: 0xc0e85e, scale: 1.0 },
+    visual: { geom: 'sphere', color: 0x93cf1f, scale: 1.0, glow: 0xdcff7a },
   },
   {
     id: 'en_blobling', name: 'ブロブの欠片', tier: 1,
@@ -73,7 +73,7 @@ export const ENEMIES = [
     ai: 'chase',
     element: 'none',
     resist: {},
-    visual: { geom: 'sphere', color: 0xd8f08a, scale: 1.0 },
+    visual: { geom: 'sphere', color: 0xb8d94a, scale: 1.0, glow: 0xe8ffa0 },
   },
 
   // ─────────── ボス ───────────
@@ -90,7 +90,7 @@ export const ENEMIES = [
     ],
     element: 'none',
     resist: { ice: -0.2, dark: 0.2 },
-    visual: { geom: 'box', color: 0x8b1a1a, scale: 1.0 },
+    visual: { geom: 'box', color: 0x8b1a1a, scale: 1.0, glow: 0xff5a3c },
   },
   {
     id: 'bs_voidmaw', name: 'ヴォイドモウ', tier: 5, boss: true,
@@ -106,7 +106,7 @@ export const ENEMIES = [
     ],
     element: 'dark',
     resist: { dark: 0.4, thunder: -0.25 },
-    visual: { geom: 'octa', color: 0x6a2ea8, scale: 1.0 },
+    visual: { geom: 'octa', color: 0x6a2ea8, scale: 1.0, glow: 0xc86bff },
   },
 ];
 

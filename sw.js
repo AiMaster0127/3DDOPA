@@ -70,6 +70,8 @@ const PRECACHE = [
   './src/scene/BossView.js',
   './src/scene/InstanceLayer.js',
   './src/scene/Quality.js',
+  './src/scene/textures.js',
+  './src/scene/materials.js',
   './src/scene/vfx/Sparks.js',
   './src/scene/vfx/DamageNumbers.js',
   './src/scene/vfx/ScreenFx.js',

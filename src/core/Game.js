@@ -211,6 +211,7 @@ export class Game {
       this.scene.applyQuality(tier);
       this.playerView.applyQuality(tier);
       this.instances.applyQuality(tier);
+      this.arena.applyQuality(tier);
       this.sparks.applyQuality(tier);
       this.damageNumbers.applyQuality(tier);
     }, initialTier);
@@ -631,7 +632,9 @@ export class Game {
     if (this.gachaDirector.running) this.gachaDirector.update(dt);
 
     this.playerView.sync(this.player, alpha, dt);
-    this.instances.sync(alpha);
+    this.instances.sync(alpha, this.scene.camera);
+
+    this.arena.update(dt, this.scene.camera);
 
     const boss = this.spawner.bossAlive ? this.enemies.findBoss() : null;
     this.bossView.sync(boss, alpha, dt);

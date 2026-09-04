@@ -32,9 +32,9 @@ export class SceneManager {
     this.renderer.info.autoReset = false;   // draw call を毎フレーム自分でリセットする
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(BG);
-    // 霧で遠景を溶かし、描画距離を切っても「切れ目」が見えないようにする
-    this.scene.fog = new THREE.FogExp2(BG, 0.013);
+    // ★背景色は置かない。Arena が張る空（グラデーション＋星）が担当する。
+    //   霧の色は空の地平と揃える。ここがずれると遠景に不自然な帯が出る。
+    this.scene.fog = new THREE.FogExp2(0x241a44, 0.0145);
 
     const c = BALANCE.camera;
     this.camera = new THREE.PerspectiveCamera(c.fov, innerWidth / innerHeight, c.near, c.far);
@@ -56,11 +56,15 @@ export class SceneManager {
 
   /** ★ライトは2つだけ。点光源は使わない（フォワードレンダリングでシェーダが重くなる）。 */
   _buildLights() {
-    // 環境光の代わり。空の色と地面の照り返しを1つで表現する
-    this.hemi = new THREE.HemisphereLight(0x6b80f0, 0x2e2350, 2.6);
+    // 環境光の代わり。空の色と地面の照り返しを1つで表現する。
+    // ★空を紫寄りにしたので、環境光もそちらへ寄せて画面全体の色を揃える
+    // ★強すぎると Lambert の出力が1を超えて色が白へ寄る。
+    //   暗い舞台なので environment は控えめにし、明暗差で見せる
+    this.hemi = new THREE.HemisphereLight(0x7a8cf5, 0x3a2350, 1.35);
     this.scene.add(this.hemi);
 
-    this.dir = new THREE.DirectionalLight(0xfff0dd, 2.6);
+    // 主光源。やや暖色にして、青い環境光との対比で立体感を出す
+    this.dir = new THREE.DirectionalLight(0xfff2e0, 2.2);
     this.dir.position.set(18, 30, 14);
     this.dir.castShadow = true;
 

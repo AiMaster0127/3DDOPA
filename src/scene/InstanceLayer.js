@@ -10,6 +10,8 @@
 import * as THREE from '../../vendor/three/three.module.min.js';
 import { ENEMIES } from '../data/enemies.js';
 import { lerp, wrapAngle } from '../core/math.js';
+import { withRim } from './materials.js';
+import { makeGlowTexture } from './textures.js';
 
 // ★毎フレーム new しない。全部モジュールスコープで使い回す
 const _m = new THREE.Matrix4();
@@ -19,7 +21,21 @@ const _s = new THREE.Vector3();
 const _c = new THREE.Color();
 const _e = new THREE.Euler();
 const UP = new THREE.Vector3(0, 1, 0);
+const _bill = new THREE.Quaternion();   // 光の板をカメラへ向ける回転
 const WHITE = new THREE.Color(1, 1, 1);
+
+/**
+ * ★リムライトは曲面では綺麗に出るが、平面には向かない。
+ *   箱の側面はひとつの面全体が同じ角度なので、面まるごとが白く光ってしまう。
+ *   形ごとに強さを変えて、平面主体の敵は控えめにする。
+ */
+const RIM_BY_GEOM = {
+  sphere:  { color: 0xdcf0ff, power: 3.4, strength: 0.55 },
+  octa:    { color: 0xdcf0ff, power: 3.0, strength: 0.42 },
+  cone:    { color: 0xdcf0ff, power: 3.2, strength: 0.38 },
+  capsule: { color: 0xdcf0ff, power: 3.4, strength: 0.55 },
+  box:     { color: 0xbcd8ff, power: 4.5, strength: 0.22 },
+};
 
 /** data/enemies.js の visual.geom 文字列 → ジオメトリ。低ポリで揃える。 */
 function makeGeometry(kind) {
@@ -54,17 +70,25 @@ export class InstanceLayer {
       const im = new THREE.InstancedMesh(
         makeGeometry(arch.visual.geom),
         // ★マテリアルの色は白にしておく。実際の色は instanceColor で与える。
-        //   こうしないと「被弾で白く光らせる」ができない（乗算では明るくできない）
-        new THREE.MeshLambertMaterial({ color: 0xffffff }),
+        //   こうしないと「被弾で白く光らせる」ができない（乗算では明るくできない）。
+        // ★リムライトで輪郭を起こす。暗い床の上で敵の形が読めるかどうかは
+        //   ここで決まる（塗りだけだとシルエットが潰れる）。
+        withRim(
+          new THREE.MeshLambertMaterial({ color: 0xffffff }),
+          RIM_BY_GEOM[arch.visual.geom] || RIM_BY_GEOM.box
+        ),
         enemies.cap
       );
       im.frustumCulled = false;      // アリーナ全体が視界内。境界球の再計算を省く
       im.castShadow = true;
       im.receiveShadow = false;      // 雑魚に落ちる影は見えない。描画負荷だけ増える
       im.count = 0;
-      im.__color = new THREE.Color(arch.visual.color);
+      // ★本体は暗く落とす。鮮やかな色は下に敷いた光の輪が受け持つ。
+      //   本体まで明るいと「色つきの積み木」に見えて、暗い舞台から浮いてしまう。
+      im.__color = new THREE.Color(arch.visual.color).multiplyScalar(0.62);
       im.__scale = arch.visual.scale;
       im.__hover = arch.visual.hover || 0;
+      im.__glow = new THREE.Color(arch.visual.glow || arch.visual.color);
 
       // ★接地オフセットはジオメトリの下端から求める。
       //   球・箱・八面体で下端が違うので、決め打ちの 0.5 だと浮く／沈む
@@ -72,6 +96,24 @@ export class InstanceLayer {
       im.__yOff = -im.geometry.boundingBox.min.y;
       this.group.add(im);
       return im;
+    });
+
+    // ★敵のまわりに淡い光を敷く。暗い床の上でシルエットが浮き、
+    //   「ただの色つきの球」から「エネルギー体」に見え方が変わる。
+    this.glowTex0 = makeGlowTexture(128, 0.02);
+    this.enemyGlows = ENEMIES.map(() => {
+      const gi = new THREE.InstancedMesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.MeshBasicMaterial({
+          map: this.glowTex0, color: 0xffffff, transparent: true, opacity: 0.6,
+          blending: THREE.AdditiveBlending, depthWrite: false, fog: true,
+        }),
+        enemies.cap
+      );
+      gi.frustumCulled = false;
+      gi.count = 0;
+      this.group.add(gi);
+      return gi;
     });
 
     // ---- 弾：1種類ぶん（武器が増えたら visualIndex で分岐させる） ----
@@ -89,6 +131,21 @@ export class InstanceLayer {
     this.projIM.__hostileColor = new THREE.Color(0xff5a6e);   // 敵弾は赤。避けるべき物だと一目で判る
     this.group.add(this.projIM);
 
+    // ★弾のまわりに加算の光を重ねる。全画面ブルームの代用で、
+    //   これがあると「発光している」と読めるようになる。
+    this.glowTex = makeGlowTexture(128, 0.10);
+    this.projGlow = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: this.glowTex, color: 0xffffff, transparent: true, opacity: 0.85,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: true,
+      }),
+      projectiles.cap
+    );
+    this.projGlow.frustumCulled = false;
+    this.projGlow.count = 0;
+    this.group.add(this.projGlow);
+
     // ---- 経験値ジェム ----
     // ★Basic（無照明）だと八面体が真上から見て「ただの四角」に見えてしまう。
     //   Lambert にして陰影を付けると、小さくても立体の宝石として読める。
@@ -102,16 +159,45 @@ export class InstanceLayer {
     this.pickupIM.count = 0;
     this.pickupIM.__color = new THREE.Color(0x6ef0c8);
     this.group.add(this.pickupIM);
+
+    this.pickupGlow = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: this.glowTex, color: 0x6ef0c8, transparent: true, opacity: 0.7,
+        blending: THREE.AdditiveBlending, depthWrite: false, fog: true,
+      }),
+      pickups.cap
+    );
+    this.pickupGlow.frustumCulled = false;
+    this.pickupGlow.count = 0;
+    this.group.add(this.pickupGlow);
   }
 
   /** 敵の影は高品質時のみ。中/低では影パスから外して描画量を半減させる。 */
   applyQuality(tier) {
     const cast = tier.shadows && tier.shadowMap >= 1024;
     for (const im of this.enemyIMs) im.castShadow = cast;
+
+    // ★加算の光は塗り面積が大きい。低品質では薄くして負荷を落とす
+    this.projGlow.material.opacity = tier.particles > 0.4 ? 0.85 : 0.45;
+    this.pickupGlow.material.opacity = tier.particles > 0.4 ? 0.7 : 0.35;
+    // ★敵の光の輪は「敵の数ぶん、体より大きい半透明の板」を重ねる。
+    //   これは塗り面積（フィルレート）を強く食う。ヘッドレスの計測には出ないが
+    //   実機のGPUでは効くので、低品質では丸ごと消す。
+    for (const gi of this.enemyGlows) {
+      gi.visible = tier.particles > 0.45;
+      gi.material.opacity = tier.particles > 0.8 ? 0.6 : 0.4;
+    }
   }
 
-  /** @param {number} alpha 前フレームからの補間係数 */
-  sync(alpha) {
+  /**
+   * @param {number} alpha 前フレームからの補間係数
+   * @param {THREE.Camera} [camera] 光の板をカメラへ向けるために使う
+   */
+  sync(alpha, camera) {
+    // ★光の板は全部同じ向き（カメラの向き）でよい。
+    //   カメラは十分遠いので、1つの回転を全インスタンスで使い回して問題ない。
+    if (camera) _bill.copy(camera.quaternion);
     this._syncEnemies(alpha);
     this._syncProjectiles(alpha);
     this._syncPickups(alpha);
@@ -140,6 +226,13 @@ export class InstanceLayer {
       //   二乗で減衰させて「一瞬光る」形にする
       const f = e.flash > 0 ? e.flash : 0;
       im.setColorAt(n, _c.copy(im.__color).lerp(WHITE, f * f * 0.7));
+
+      // 足元に敷く光。被弾すると強くなる
+      const gi = this.enemyGlows[e.archIndex];
+      _p.y = sc * 0.45 + im.__hover;
+      _s.setScalar(sc * (2.4 + f * 1.6));
+      gi.setMatrixAt(n, _m.compose(_p, _bill, _s));
+      gi.setColorAt(n, _c.copy(im.__glow).lerp(WHITE, f * f));
     }
 
     for (let i = 0; i < ims.length; i++) {
@@ -147,6 +240,11 @@ export class InstanceLayer {
       im.count = im.__n;                       // ★描画数を実数に絞る
       im.instanceMatrix.needsUpdate = true;
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
+
+      const gi = this.enemyGlows[i];
+      gi.count = im.__n;
+      gi.instanceMatrix.needsUpdate = true;
+      if (gi.instanceColor) gi.instanceColor.needsUpdate = true;
     }
   }
 
@@ -166,12 +264,21 @@ export class InstanceLayer {
       _s.setScalar(p.hostile ? 1.5 : 1);
       im.setMatrixAt(n, _m.compose(_p, _q, _s));
       im.setColorAt(n, p.hostile ? im.__hostileColor : im.__color);
+
+      // 光の板。弾そのものより一回り大きく、カメラを向ける
+      _s.setScalar(p.hostile ? 3.0 : 2.1);
+      this.projGlow.setMatrixAt(n, _m.compose(_p, _bill, _s));
+      this.projGlow.setColorAt(n, p.hostile ? im.__hostileColor : im.__color);
       n++;
     }
 
     im.count = n;
     im.instanceMatrix.needsUpdate = true;
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
+
+    this.projGlow.count = n;
+    this.projGlow.instanceMatrix.needsUpdate = true;
+    if (this.projGlow.instanceColor) this.projGlow.instanceColor.needsUpdate = true;
   }
 
   _syncPickups(alpha) {
@@ -190,11 +297,18 @@ export class InstanceLayer {
       _s.setScalar(1);
       im.setMatrixAt(n, _m.compose(_p, _q, _s));
       im.setColorAt(n, im.__color);
+
+      // 拾える物だと判るように、宝石にも光をまとわせる
+      _s.setScalar(1.5 + Math.sin(g.spin * 2) * 0.18);
+      this.pickupGlow.setMatrixAt(n, _m.compose(_p, _bill, _s));
       n++;
     }
 
     im.count = n;
     im.instanceMatrix.needsUpdate = true;
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
+
+    this.pickupGlow.count = n;
+    this.pickupGlow.instanceMatrix.needsUpdate = true;
   }
 }

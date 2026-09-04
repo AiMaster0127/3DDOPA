@@ -104,7 +104,12 @@ const clamp = await page.evaluate(async () => {
   const g = __DOPA.game;
   g.startRun();
   g.player.x = 500; g.player.z = 500;
-  await new Promise(r => setTimeout(r, 300));
+  // ★1ティック回れば壁で止まる。実時間で決め打ちに待つと、描画が重い環境で
+  //   1フレームも進まないまま測ってしまい「壁が効いていない」と誤検出する。
+  const w0 = Date.now();
+  while (Math.hypot(g.player.x, g.player.z) > g.arena.radius && Date.now() - w0 < 8000) {
+    await new Promise(r => setTimeout(r, 40));
+  }
   return { r: Math.hypot(g.player.x, g.player.z), arena: g.arena.radius, state: g.state };
 });
 check(clamp.r <= clamp.arena, 'アリーナ外に出られない',
@@ -472,7 +477,9 @@ const stage = await page.evaluate(async () => {
   const b2 = g.enemies.findBoss();
   if (b2) g.combat.hitEnemy(b2, 999999, false, g.player.x, g.player.z, 0);
   g.spawner.elapsed = 9999;
-  await wait(400);
+  // ★クリア判定は spawner.tick が回って初めて立つ。実時間で待つと
+  //   描画が重い環境ではティックが回りきらず、通ったり落ちたりする。
+  await until(() => !document.getElementById('clear').hidden, 3);
   out.clear = { state: g.state, screen: !document.getElementById('clear').hidden,
                 marked: !!g.save.data.meta.clearedStages[3],
                 gained: g.save.data.wallet.gems - gems0,
