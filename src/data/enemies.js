@@ -139,8 +139,28 @@ export const ENEMIES = [
     ],
     element: 'none',
     resist: { ice: -0.2, dark: 0.2 },
-    visual: { geom: 'box', color: 0xff3020, scale: 1.0, glow: 0xff5a3c,
+    // boss は BossView が使う専用の形（src/scene/bossShapes.js）
+    visual: { geom: 'box', boss: 'gorehorn', color: 0xff3020, scale: 1.0, glow: 0xff5a3c,
               pal: { body: 0x2a1a1a, edge: 0x412828, core: 0xff2418, bone: 0xe2d4b0, metal: 0xd0a13c } },
+  },
+  {
+    id: 'bs_thunderdrake', name: '雷龍', tier: 4, boss: true,
+    hp: 4600, atk: 30, speed: 3.4, radius: 2.3,
+    reward: { xp: 430, gems: 95, tickets: 1 },
+    ai: 'boss_drake',
+    // 空へ逃げず、回り込みながら雷を吐き、隙を見て突っ込んでくる
+    charge: { windup: 0.55, dash: 0.55, speedMul: 5.4, cd: 4.2, range: 22 },
+    shoot: { range: 22, cd: 1.7, speed: 20, dmg: 18, radius: 0.42, keep: 12, spread: 3 },
+    slam: { cd: 6.5, radius: 7.5, dmg: 34, windup: 0.8 },
+    phases: [
+      { hpPct: 1.00, speedMul: 1.0, cdMul: 1.0 },
+      { hpPct: 0.55, speedMul: 1.2, cdMul: 0.72 },
+      { hpPct: 0.25, speedMul: 1.4, cdMul: 0.52 },
+    ],
+    element: 'thunder',
+    resist: { thunder: 0.45, ice: -0.25 },
+    visual: { geom: 'serpent', boss: 'drake', color: 0x4ad8ff, scale: 1.0, glow: 0x7ae8ff,
+              pal: { body: 0x1b2731, edge: 0x2c3f4c, core: 0x5ce0ff, bone: 0xdcd2b6, metal: 0xc9a83c } },
   },
   {
     id: 'bs_voidmaw', name: 'ヴォイドモウ', tier: 5, boss: true,
@@ -156,7 +176,8 @@ export const ENEMIES = [
     ],
     element: 'dark',
     resist: { dark: 0.4, thunder: -0.25 },
-    visual: { geom: 'octa', color: 0xa858ff, scale: 1.0, glow: 0xc86bff,
+    visual: { geom: 'octa', boss: 'voidmaw', color: 0xa858ff, scale: 1.0, glow: 0xc86bff,
+              hover: 1.0,                              // 脚を持たない。浮かせる
               pal: { body: 0x1d1630, edge: 0x2e2247, core: 0xc44cff, bone: 0xd8cdc0 } },
   },
 ];

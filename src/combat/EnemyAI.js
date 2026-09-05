@@ -203,4 +203,60 @@ function boss_voidmaw(e, player, dt, ctx) {
   }
 }
 
-export const AI = { chase, strafe, shooter, charger, boss_gorehorn, boss_voidmaw };
+/**
+ * 雷龍：回り込みながら雷を吐き、隙を見て突っ込み、近ければ落雷。
+ *
+ * ★ゴアホーン（詰めて殴る）とヴォイドモウ（下がって撒く）の中間に置く。
+ *   同じ土俵に3体並べると、後から出た方が「同じ動きの数値違い」に見える。
+ */
+function boss_drake(e, player, dt, ctx) {
+  const ph = updatePhase(e);
+  const c = e.arch.charge;
+  const s = e.arch.shoot;
+  const sl = e.arch.slam;
+  const t = toPlayer(e, player);
+
+  if (e.aiState === 1) {                       // 突進の溜め
+    stop(e);
+    if (e.aiT <= 0) { e.aiState = 2; e.aiT = c.dash; e.dashX = t.nx; e.dashZ = t.nz; }
+    return;
+  }
+  if (e.aiState === 2) {                       // 突進
+    e.vx = e.dashX * e.speed * c.speedMul * ph.speedMul;
+    e.vz = e.dashZ * e.speed * c.speedMul * ph.speedMul;
+    if (e.aiT <= 0) { e.aiState = 0; e.aiCd = c.cd * ph.cdMul; }
+    return;
+  }
+  if (e.aiState === 3) {                       // 落雷の溜め
+    stop(e);
+    if (e.aiT <= 0) { ctx.slam(e, sl.radius, sl.dmg); e.aiState = 0; e.aiCd = sl.cd * ph.cdMul; }
+    return;
+  }
+
+  // 技の選択。近い＝落雷／中距離＝突進
+  if (e.aiCd <= 0) {
+    if (t.d < sl.radius * 0.7) { e.aiState = 3; e.aiT = sl.windup; stop(e); return; }
+    if (t.d < c.range) { e.aiState = 1; e.aiT = c.windup; stop(e); return; }
+  }
+
+  // 平常時は間合いを保ちながら横へ回る
+  if (t.d < s.keep * 0.85) {
+    e.vx = -t.nx * e.speed * 0.8 * ph.speedMul;
+    e.vz = -t.nz * e.speed * 0.8 * ph.speedMul;
+  } else {
+    e.vx = (t.nx * 0.35 - t.nz * e.aiSide) * e.speed * ph.speedMul;
+    e.vz = (t.nz * 0.35 + t.nx * e.aiSide) * e.speed * ph.speedMul;
+  }
+
+  if (e.shootCd <= 0 && t.d <= s.range) {
+    e.shootCd = s.cd * ph.cdMul;
+    const n = s.spread || 1;
+    const base = Math.atan2(t.nx, t.nz);
+    for (let i = 0; i < n; i++) {
+      const a = base + (n > 1 ? (i / (n - 1) - 0.5) * 0.42 : 0);
+      ctx.fire(e, Math.sin(a), Math.cos(a), s);
+    }
+  }
+}
+
+export const AI = { chase, strafe, shooter, charger, boss_gorehorn, boss_drake, boss_voidmaw };

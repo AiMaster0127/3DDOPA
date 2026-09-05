@@ -79,6 +79,7 @@ const PRECACHE = [
   './src/scene/weaponShapes.js',
   './src/scene/character.js',
   './src/scene/enemyShapes.js',
+  './src/scene/bossShapes.js',
   './src/scene/vfx/Sparks.js',
   './src/scene/vfx/DamageNumbers.js',
   './src/scene/vfx/ScreenFx.js',

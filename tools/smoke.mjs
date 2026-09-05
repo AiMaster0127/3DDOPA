@@ -513,6 +513,71 @@ check(stage.clear.state === 'dead' && stage.clear.screen && stage.clear.marked &
       'ボス撃破でクリア・報酬・次ステージ解禁',
       `報酬 💎${stage.clear.gained} / ステージ4解禁 ${stage.clear.unlocked4}`);
 
+// ---- ボスが3体とも別物として成立しているか ----
+// ★新しいボスは「形が違うだけ」になりやすい。技が実際に出るところまで見る。
+const bosses = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const until = async (fn, sec, capMs = 25000) => {
+    const t0 = g.elapsed, w0 = Date.now();
+    while (!fn() && g.elapsed - t0 < sec && Date.now() - w0 < capMs) await wait(40);
+    return fn();
+  };
+  const { STAGES } = await import('/src/data/stages.js');
+  const { makeBossGeometry, BOSS_SHAPES } = await import('/src/scene/bossShapes.js');
+  const { ENEMIES } = await import('/src/data/enemies.js');
+
+  const out = { shapes: {}, stageBosses: STAGES.filter(s => s.boss).map(s => s.boss.id) };
+
+  // ボスごとに専用の形が割り当たっているか（雑魚の使い回しになっていないか）
+  for (const e of ENEMIES.filter(x => x.boss)) {
+    out.shapes[e.id] = e.visual.boss && BOSS_SHAPES.includes(e.visual.boss) ? e.visual.boss : null;
+  }
+  // 胴の幅が記録されているか（当たり判定合わせに使う）
+  out.hitHalf = {};
+  for (const k of BOSS_SHAPES) {
+    const geo = makeBossGeometry(k);
+    out.hitHalf[k] = geo.userData.hitHalf || 0;
+    geo.dispose();
+  }
+
+  // 雷龍：撃つ／突っ込む が実際に出るか
+  g.selectStage(5); g.startRun(); g.player.takeDamage = () => false;
+  g.spawner.elapsed = 169.9;
+  await until(() => !!g.enemies.findBoss(), 3);
+  const drake = g.enemies.findBoss();
+  out.drake = drake ? { id: drake.arch.id, view: g.bossView.group.visible } : null;
+  if (drake) {
+    drake.hp = drake.maxHp = 1e9;
+    let fired = 0, charged = false;
+    // 弾が飛ぶか／突進の状態に入るか
+    await until(() => {
+      for (const p of g.projectiles.list) if (p.active && p.hostile) fired++;
+      if (drake.aiState === 1 || drake.aiState === 2) charged = true;
+      return fired > 0 && charged;
+    }, 14);
+    out.drake.fired = fired;
+    out.drake.charged = charged;
+  }
+  return out;
+});
+
+const bossShapesOk = Object.values(bosses.shapes).every(v => !!v) &&
+                     new Set(Object.values(bosses.shapes)).size === Object.keys(bosses.shapes).length;
+check(bossShapesOk, 'ボスは全員が専用の形を持つ',
+      Object.entries(bosses.shapes).map(([k, v]) => `${k}→${v}`).join(' / '));
+check(new Set(bosses.stageBosses).size === bosses.stageBosses.length,
+      'ボスがステージ間で使い回されていない', bosses.stageBosses.join(' / '));
+check(Object.values(bosses.hitHalf).every(v => v > 0),
+      'ボスが胴の幅を申告している（当たり判定合わせに使う）',
+      Object.entries(bosses.hitHalf).map(([k, v]) => `${k} ${v}`).join(' / '));
+check(!!bosses.drake && bosses.drake.id === 'bs_thunderdrake' && bosses.drake.view,
+      'ステージ5のボスが雷龍になっている',
+      bosses.drake ? `${bosses.drake.id} / 専用描画 ${bosses.drake.view}` : '出現せず');
+check(!!bosses.drake && bosses.drake.fired > 0 && bosses.drake.charged,
+      '雷龍が雷を撃ち、突進もしてくる',
+      bosses.drake ? `敵弾 ${bosses.drake.fired} 発 / 突進 ${bosses.drake.charged}` : '—');
+
 // ---- メタ進行（フェーズ6） ----
 const metaRes = await page.evaluate(async () => {
   const g = __DOPA.game;

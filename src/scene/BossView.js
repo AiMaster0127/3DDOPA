@@ -8,6 +8,7 @@
 import * as THREE from '../../vendor/three/three.module.min.js';
 import { lerp, wrapAngle, damp } from '../core/math.js';
 import { withRim } from './materials.js';
+import { makeBossGeometry } from './bossShapes.js';
 
 const WINDUP_COLOR = new THREE.Color(0xffdd55);
 const DASH_COLOR = new THREE.Color(0xff3b3b);
@@ -23,36 +24,23 @@ export class BossView {
     this.rig = new THREE.Group();
     this.group.add(this.rig);
 
-    this.baseColor = new THREE.Color(0x8b1a1a);
+    // ★平常時は白。塗り分けは頂点カラーが持っているので、
+    //   ここを白にしておけば「溜め＝黄／突進＝赤」を全身に乗せられる。
+    this.baseColor = new THREE.Color(1, 1, 1);
 
     this.mat = withRim(new THREE.MeshStandardMaterial({
-      color: 0x8b1a1a, roughness: 0.5, metalness: 0.25,
+      color: 0xffffff, vertexColors: true, roughness: 0.52, metalness: 0.22,
+      side: THREE.DoubleSide,        // 腰の装甲や衣の内側を見せる
       emissive: 0x000000, emissiveIntensity: 0,
-    }), { color: 0xffb090, power: 2.2, strength: 1.0 });
+      // ★ボスは平面（箱）主体。リムを強く掛けると面がまるごと白飛びして、
+      //   黒い装甲が薄茶色の塊に見える（実際そうなった）。鋭く弱くする
+    }), { color: 0xffd0b0, power: 4.4, strength: 0.26 });
 
-    // 胴・頭・角。プリミティブの合成だけで「大きくて怖い」を作る
-    this.body = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.5, 1.9), this.mat);
-    this.body.position.y = 0.95;
-    this.body.castShadow = true;
-
-    this.head = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 0.9), this.mat);
-    this.head.position.set(0, 1.5, 1.2);
-    this.head.castShadow = true;
-
-    const hornMat = withRim(
-      new THREE.MeshStandardMaterial({ color: 0xf0e6d0, roughness: 0.6 }),
-      { color: 0xfff0d0, power: 2.0, strength: 1.1 }
-    );
-    const hornGeo = new THREE.ConeGeometry(0.17, 0.9, 6);
-    for (const sx of [-1, 1]) {
-      const h = new THREE.Mesh(hornGeo, hornMat);
-      h.position.set(0.36 * sx, 1.9, 1.35);
-      h.rotation.x = 0.7;
-      h.castShadow = true;
-      this.rig.add(h);
-    }
-
-    this.rig.add(this.body, this.head);
+    // 形は attach() でボスごとに作り直す
+    this.mesh = new THREE.Mesh(makeBossGeometry('gorehorn'), this.mat);
+    this.mesh.castShadow = true;
+    this.rig.add(this.mesh);
+    this._shape = 'gorehorn';
 
     // 足元のリング。ボスの間合いを床に描く
     this.ring = new THREE.Mesh(
@@ -84,15 +72,27 @@ export class BossView {
 
   /** ボスが湧いたとき。アーキタイプごとに色と大きさを合わせる。 */
   attach(e) {
-    this.baseColor.setHex(e.arch.visual.color);
+    const v = e.arch.visual;
     this.mat.color.copy(this.baseColor);
-    this.mat.emissive.setHex(e.arch.visual.color);
+    this.mat.emissive.setHex(v.color);
+
+    // ボスごとに形を作り直す。1ランに1回なので、その都度作ってよい
+    const shape = v.boss || 'gorehorn';
+    if (shape !== this._shape || v.pal !== this._pal) {
+      this._shape = shape;
+      this._pal = v.pal;
+      this.mesh.geometry.dispose();
+      this.mesh.geometry = makeBossGeometry(shape, v.pal);
+    }
 
     // ★見た目を当たり判定に合わせる。
-    //   胴の半幅は素で0.8なので、半径の0.9倍になるよう丸ごと拡大する。
-    //   これをやらないと「見えていない所で殴られる」理不尽になる。
-    this.rig.scale.setScalar((e.radius * 0.9) / 0.8);
+    //   基準は「胴の幅」。境界箱の最大値を使うと角や翼まで含めてしまい、
+    //   派手な形ほど全体が縮んで小さく見える（雷龍が自機と同じ大きさになった）。
+    //   角の先や翼端は判定の外へはみ出してよい。中身が痩せる方が問題。
+    const halfW = this.mesh.geometry.userData.hitHalf || 1.0;
+    this.rig.scale.setScalar((e.radius * 0.92) / halfW);
     this.ring.scale.setScalar(e.radius);
+    this._hover = v.hover || 0;
     this.group.visible = true;
   }
 
@@ -108,6 +108,15 @@ export class BossView {
     this.group.rotation.y = e.pFacing + wrapAngle(e.facing - e.pFacing) * alpha;
 
     this._pulse += dt * 9;
+    this._idle = (this._idle || 0) + dt;
+
+    // ★待機中も微かに動かす。完全に静止したボスは置物に見える。
+    //   浮遊するボス（hover>0）は上下に、地に立つボスは呼吸だけ。
+    const breathe = Math.sin(this._idle * 1.6) * 0.012;
+    // ★回転はさせない。ボスは口や角の向きで狙いを伝えているので、
+    //   胴を回すと「どこを向いているか」が読めなくなる
+    this.rig.position.y = this._hover ? Math.sin(this._idle * 1.1) * 0.22 : 0;
+    this.rig.scale.y = this.rig.scale.x * (1 + breathe);
 
     // ★状態を色で伝える：溜め=黄 / 突進=赤 / 通常=素の色
     const windup = e.aiState === 1 || e.aiState === 3;

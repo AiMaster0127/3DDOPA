@@ -68,7 +68,8 @@ export const STAGES = [
       { at: 60,  spawn: [['en_stinger', 7], ['en_serpent', 4], ['en_charger', 6]], rate: 3.4, cap: 110 },
       { at: 125, spawn: [['en_serpent', 6], ['en_revenant', 6], ['en_brute', 5]], rate: 4.0, cap: 135 },
     ],
-    boss: { id: 'bs_gorehorn', at: 170 },
+    // ★ここが3面と同じゴアホーンだった。ボスが使い回しだと進んだ実感が消える
+    boss: { id: 'bs_thunderdrake', at: 170 },
     scaling: { hp: 3.00, atk: 1.94 },
     reward: { gems: 220, firstClear: { gems: 600, tickets: 2 } },
     unlock: 4,
