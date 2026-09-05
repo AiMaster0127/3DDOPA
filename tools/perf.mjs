@@ -79,22 +79,47 @@ const r = await page.evaluate(async (LOAD) => {
   //   1回だけ測ると、たまたまGCが走らなかった回に「増えた」と誤検出する。
   //   複数回測って最小値を採る：ループが本当に確保していれば
   //   どの回も大きな正の値になるので、これで見逃しはしない。
-  let heapDelta = Infinity;
-  for (let trial = 0; trial < 3; trial++) {
-    hold();
-    globalThis.gc?.();
-    await new Promise(res => setTimeout(res, 60));
-    const a = performance.memory?.usedJSHeapSize ?? 0;
+  //
+  // ★gc() は必ず2回呼ぶ。1回だけだと回収しきれず、残りが計測窓の中で
+  //   片付いたり片付かなかったりして、**確保していないのに増えて見える**。
+  //   実際これで「1.5MB増えた」と誤検出した（各系統を個別に測ると全部0だった）。
+  //   起動直後は手続きテクスチャ生成のゴミも残っているので、
+  //   捨てるための空回し（暖機）も1周入れる。
+  const spin = () => {
     for (let i = 0; i < 600; i++) {
       g.update(STEP);
       g.instances.sync(0.5);
       g.playerView.sync(g.player, 0.5, STEP);
       g.cameraRig.follow(g.player, STEP);
+      g.arena.update(STEP, g.scene.camera);   // 舞台の毎フレーム更新も含めて見る
     }
+  };
+  hold(); spin();                               // 暖機（結果は捨てる）
+
+  let heapDelta = Infinity;
+  for (let trial = 0; trial < 3; trial++) {
+    hold();
+    // ★ここで await して event loop へ戻してはいけない。
+    //   戻すとページ自身の requestAnimationFrame ループが走り、
+    //   その描画ぶんが計測窓に紛れ込む（3MB増えたように見えた）。
+    //   gc を2回叩いた直後に、同じ同期ブロックの中で測り切ること。
+    globalThis.gc?.(); globalThis.gc?.();
+    const a = performance.memory?.usedJSHeapSize ?? 0;
+    spin();
     const b = performance.memory?.usedJSHeapSize ?? 0;
     heapDelta = Math.min(heapDelta, b - a);
   }
   const h0 = 0, h1 = heapDelta;
+
+  // ---- 描画統計 ----
+  // ★実際に1フレーム描かないと draw call も三角形数も取れない。
+  //   ヒープ計測は event loop へ戻さずに回すので、その前に自分で描いておく。
+  //   ここを省くと「描画0件」を予算内と判定してしまい、検査が意味を失う。
+  hold();
+  g.instances.sync(0.5, g.scene.camera);
+  g.playerView.sync(g.player, 0.5, STEP);
+  g.arena.update(STEP, g.scene.camera);
+  g.scene.render();
 
   const info = g.scene.renderer.info;
   return { parts, heapDelta: h1 - h0, measured: !!performance.memory, loaded,
@@ -129,6 +154,8 @@ if (r.loaded < 100) fails.push(`負荷シナリオの敵数が不足 (${r.loaded
 // ★state が playing でないと update() が素通りして計測が無意味になる
 if (r.state !== 'playing') fails.push(`計測中の state が playing ではない (${r.state})`);
 if (r.tris > 60000) fails.push(`三角形数 超過 (${r.tris} > 60000)`);
+// ★「0件だから予算内」は検査になっていない。実際に描いたことを確かめる
+if (r.draws < 5 || r.tris < 1000) fails.push(`描画統計が取れていない (draw ${r.draws} / tri ${r.tris})`);
 if (errors.length) fails.push(`ページエラー: ${errors.join(' | ')}`);
 
 await browser.close();

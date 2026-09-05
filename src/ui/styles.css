@@ -281,6 +281,25 @@ html, body {
 }
 .home[hidden], .panel[hidden] { display: none; }
 
+/* ★拠点とステージ選択だけは、背後の舞台を透かして見せる。
+   戦闘中の見下ろし視点には舞台の縁も遠景も入らないので、
+   ここで見せないと作った景色を一度も見せないことになる。
+   文字が読めなくなるのは論外なので、上下だけ濃い幕を掛ける。 */
+#home, #stages {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 39px, rgba(90, 140, 255, .028) 39px 40px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgba(90, 140, 255, .028) 39px 40px),
+    linear-gradient(180deg,
+      rgba(5, 6, 16, .94) 0%,
+      rgba(5, 6, 16, .62) 20%,
+      rgba(5, 6, 16, .44) 48%,
+      rgba(5, 6, 16, .72) 78%,
+      rgba(5, 6, 16, .95) 100%);
+}
+/* 透けた背景の上でも見出しが沈まないように、文字側の影を強める */
+#home .home-title { filter: drop-shadow(0 0 26px rgba(67, 232, 255, .45)) drop-shadow(0 2px 10px rgba(0, 0, 0, .9)); }
+#home .home-sub, #home .home-foot, #stages .panel-title { text-shadow: 0 2px 8px rgba(0, 0, 0, .85); }
+
 .home-top, .panel-top {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   flex: 0 0 auto;
@@ -466,7 +485,7 @@ html, body {
 }
 .inv-card {
   display: flex; flex-direction: column; gap: 3px; padding: 9px 10px;
-  background: rgba(20, 23, 52, .9);
+  background: rgba(18, 21, 48, .94);
   border: 1.5px solid var(--rc, #9aa3c0); border-left-width: 4px; border-radius: 10px;
   font: inherit; color: var(--ink); text-align: left; cursor: pointer;
   transition: transform .1s ease, box-shadow .1s ease;
@@ -536,7 +555,14 @@ html, body {
 .stage-card:hover:not(:disabled), .stage-card:focus-visible:not(:disabled) {
   transform: translateX(3px); border-color: var(--accent); outline: none;
 }
-.stage-card:disabled { opacity: .4; cursor: not-allowed; }
+/* ★背景に舞台を透かすようにしたので、カードごと opacity を下げると
+   未解放の行が読めなくなる。板は残して文字だけ落とす。 */
+.stage-card:disabled {
+  cursor: not-allowed; color: var(--dim);
+  background: rgba(13, 16, 36, .86);
+  border-color: rgba(120, 150, 255, .14);
+}
+.stage-card:disabled .sc-no { background: rgba(150, 170, 210, .10); color: var(--dim); }
 .stage-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .sc-no {
   flex: 0 0 auto; width: 38px; height: 38px; border-radius: 9px;

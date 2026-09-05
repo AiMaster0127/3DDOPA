@@ -7,7 +7,7 @@
  * ★リリースのたびに CACHE のバージョンを上げること。
  *   上げないと古いキャッシュが残り、更新が反映されない。
  */
-const CACHE = 'dopa-arena-v1';
+const CACHE = 'dopa-arena-v2';
 
 const PRECACHE = [
   './',
@@ -36,6 +36,7 @@ const PRECACHE = [
   './src/data/skills.js',
   './src/data/gacha.js',
   './src/data/stages.js',
+  './src/data/themes.js',
   './src/data/upgrades.js',
   './src/data/achievements.js',
   './src/data/characters.js',
@@ -71,6 +72,8 @@ const PRECACHE = [
   './src/scene/InstanceLayer.js',
   './src/scene/Quality.js',
   './src/scene/textures.js',
+  './src/scene/stageTextures.js',
+  './src/scene/deckTextures.js',
   './src/scene/materials.js',
   './src/scene/geometry.js',
   './src/scene/vfx/Sparks.js',

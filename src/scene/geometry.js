@@ -209,6 +209,62 @@ export function makeWeaponGeometry(model) {
 }
 
 
+// ───────────────────────── 舞台の装飾 ─────────────────────────
+
+/**
+ * テーマごとの装飾の形。
+ * ★見下ろし視点では、高く細い物ほど画面端で大きく傾いて見え「倒れかけている」
+ *   ように読める。どれも高さ3程度までに抑え、面で見せる。
+ */
+const DECOR_BUILDERS = {
+  // 崩れた石板。倒れたまま風化している
+  slab: () => mergeParts([
+    { geo: new THREE.BoxGeometry(2.4, 0.44, 1.5), pos: [0, 0.22, 0], rot: [0, 0, 0.05] },
+    { geo: new THREE.BoxGeometry(1.5, 1.0, 1.0), pos: [0.45, 0.62, 0.12], rot: [0.12, 0.42, -0.16] },
+    { geo: new THREE.BoxGeometry(0.72, 0.34, 0.72), pos: [-1.15, 0.17, 0.42], rot: [0, 0.8, 0.18] },
+  ]),
+  // 折れた角柱。台座を残して上が欠けている
+  column: () => mergeParts([
+    { geo: new THREE.BoxGeometry(1.6, 0.3, 1.6), pos: [0, 0.15, 0] },
+    { geo: new THREE.CylinderGeometry(0.5, 0.62, 2.0, 8), pos: [0, 1.3, 0] },
+    { geo: new THREE.CylinderGeometry(0.3, 0.52, 0.62, 8), pos: [0.12, 2.5, 0.05], rot: [0.18, 0, 0.16] },
+  ]),
+  // 牙。四角錐なので、どの角度から見ても稜線が立つ
+  fang: () => mergeParts([
+    { geo: new THREE.BoxGeometry(1.8, 0.28, 1.5), pos: [0, 0.14, 0], rot: [0, 0.3, 0] },
+    { geo: new THREE.ConeGeometry(0.6, 2.5, 4), pos: [0, 1.4, 0], rot: [0.14, 0.4, 0.1] },
+    { geo: new THREE.ConeGeometry(0.33, 1.3, 4), pos: [0.72, 0.72, 0.3], rot: [-0.18, 0, -0.26] },
+  ]),
+  // 鉄骨。斜めに突き刺さった梁
+  girder: () => mergeParts([
+    { geo: new THREE.BoxGeometry(2.1, 0.22, 0.75), pos: [0.35, 0.11, 0.2], rot: [0, 0.5, 0] },
+    { geo: new THREE.BoxGeometry(0.3, 2.7, 0.85), pos: [0, 1.35, 0], rot: [0, 0, 0.22] },
+    { geo: new THREE.BoxGeometry(1.0, 0.24, 0.24), pos: [-0.32, 2.4, 0], rot: [0, 0, 0.22] },
+  ]),
+  // 尖塔。低い台座に鋭い四角錐
+  spike: () => mergeParts([
+    { geo: new THREE.CylinderGeometry(0.85, 1.05, 0.42, 4), pos: [0, 0.21, 0] },
+    { geo: new THREE.ConeGeometry(0.5, 2.9, 4), pos: [0, 1.7, 0] },
+  ]),
+  // 破片。地面から突き出た結晶
+  shard: () => mergeParts([
+    { geo: new THREE.BoxGeometry(1.4, 0.14, 1.4), pos: [0, 0.07, 0], rot: [0, 0.4, 0] },
+    { geo: new THREE.OctahedronGeometry(0.95, 0), pos: [0, 1.5, 0], scale: [0.5, 1.7, 0.5], rot: [0.2, 0.4, 0.14] },
+    { geo: new THREE.OctahedronGeometry(0.55, 0), pos: [0.72, 0.62, 0.3], scale: [0.55, 1.3, 0.55], rot: [-0.3, 0, 0.4] },
+  ]),
+};
+
+/** @param {string} kind data/themes.js の decor.kind */
+export function makeDecorGeometry(kind) {
+  const build = DECOR_BUILDERS[kind];
+  if (!build) {
+    console.warn(`未知の decor.kind: ${kind}。slab で代用する`);
+    return DECOR_BUILDERS.slab();
+  }
+  return build();
+}
+
+
 /**
  * 敵1体あたりの三角形数を数える。
  * ★敵は最大150体、影のパスでもう一度描かれるので、ここが2倍で効く。

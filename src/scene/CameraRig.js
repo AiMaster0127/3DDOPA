@@ -59,6 +59,26 @@ export class CameraRig {
     this.camera.lookAt(_look);
   }
 
+  /**
+   * 拠点で舞台をゆっくり見せるカメラ。
+   *
+   * ★戦闘中の見下ろし視点では、舞台の縁も尖塔も遠景も画面に入らない
+   *   （俯角62度だと、地面は約26m先で画面の上端に消える）。
+   *   作り込んだ景色を一度も見せないのは設計として間違っているので、
+   *   拠点にいる間だけ引いて回し、ステージを「見せる」。
+   */
+  showcase(dt, radius) {
+    this.orbit = (this.orbit || 0) + dt * 0.085;
+    const d = radius * 1.42;   // 遠景の塔（半径84〜）の内側に収める
+    this.camera.position.set(
+      Math.sin(this.orbit) * d,
+      radius * 0.66 + Math.sin(this.orbit * 0.7) * radius * 0.10,
+      Math.cos(this.orbit) * d
+    );
+    this.camera.lookAt(0, 3.5, 0);
+    this._init = false;          // 出撃時に追従を撮り直させる
+  }
+
   /** 被弾・爆発などから呼ぶ（フェーズ2以降で使用） */
   shake(power = 0.4) {
     this.shakeX += (Math.random() * 2 - 1) * power;

@@ -81,6 +81,21 @@ export class SceneManager {
     this.scene.add(this.dir.target);  // target は明示的に scene に入れないと行列が更新されない
   }
 
+  /**
+   * ステージのテーマを反映する。
+   * ★霧の色は空の地平と揃える。ずれると遠景に不自然な帯が出て、
+   *   せっかく置いた遠景の塔が「貼り付けた絵」に見える。
+   */
+  applyTheme(theme) {
+    this.scene.fog.color.setHex(theme.fog.color);
+    this.scene.fog.density = theme.fog.density;
+    this.hemi.color.setHex(theme.light.sky);
+    this.hemi.groundColor.setHex(theme.light.ground);
+    this.hemi.intensity = theme.light.hemi;
+    this.dir.color.setHex(theme.light.dir);
+    this.dir.intensity = theme.light.dirI;
+  }
+
   /** Quality から呼ばれる。DPR・影の有無・シャドウマップ解像度を切り替える。 */
   applyQuality(tier) {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, tier.dpr));

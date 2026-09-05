@@ -12,6 +12,7 @@ import { Quality, TIERS } from '../scene/Quality.js';
 import { SceneManager } from '../scene/SceneManager.js';
 import { CameraRig } from '../scene/CameraRig.js';
 import { Arena } from '../scene/Arena.js';
+import { themeForStage } from '../data/themes.js';
 import { PlayerView } from '../scene/PlayerView.js';
 import { InstanceLayer } from '../scene/InstanceLayer.js';
 import { BossView } from '../scene/BossView.js';
@@ -205,6 +206,7 @@ export class Game {
       this.stageId = this.stageUI.highestUnlocked();
     }
     this.spawner.setStage(this.stageId);
+    this._applyTheme(this.stageId);
 
     // 品質が変わったら描画側にまとめて反映する
     this.quality = new Quality((tier) => {
@@ -419,6 +421,18 @@ export class Game {
     this.save.markDirty();
     this.spawner.setStage(id);
     this.homeUI.setStage(STAGE_BY_ID.get(id));
+    this._applyTheme(id);
+  }
+
+  /**
+   * ステージの見た目を切り替える。
+   * ★舞台を作り直すので数十msかかる。呼ぶのは拠点にいる間だけにすること
+   *   （出撃中に呼ぶと目に見えて詰まる）。
+   */
+  _applyTheme(stageId) {
+    const theme = themeForStage(stageId);
+    this.arena.setTheme(theme);
+    this.scene.applyTheme(theme);
   }
 
   /** 拠点へ。ランは止め、HUDを隠す。 */
@@ -640,7 +654,9 @@ export class Game {
     this.bossView.sync(boss, alpha, dt);
 
     this.sparks.update(dt);
-    this.cameraRig.follow(this.player, dt);
+    // 拠点では舞台を見せるカメラに切り替える。戦闘の視点では景色が画面に入らない
+    if (this.state === STATE.HOME) this.cameraRig.showcase(dt, this.arena.radius);
+    else this.cameraRig.follow(this.player, dt);
     this.scene.syncShadow(this.player.x, this.player.z);
 
     this.scene.render();
