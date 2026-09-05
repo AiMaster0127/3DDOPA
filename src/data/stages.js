@@ -29,7 +29,7 @@ export const STAGES = [
     waves: [
       { at: 0,  spawn: [['en_slime', 8], ['en_bat', 6]],                    rate: 2.0, cap: 60 },
       { at: 45, spawn: [['en_bat', 8], ['en_stinger', 4]],                  rate: 2.6, cap: 85 },
-      { at: 95, spawn: [['en_bat', 6], ['en_stinger', 6], ['en_brute', 3]], rate: 3.2, cap: 105 },
+      { at: 95, spawn: [['en_bat', 6], ['en_stinger', 5], ['en_lantern', 3], ['en_brute', 3]], rate: 3.2, cap: 105 },
     ],
     boss: null,
     scaling: { hp: 1.35, atk: 1.22 },
@@ -41,7 +41,7 @@ export const STAGES = [
     waves: [
       { at: 0,   spawn: [['en_slime', 6], ['en_brute', 4]],                     rate: 2.2, cap: 65 },
       { at: 50,  spawn: [['en_brute', 6], ['en_charger', 5]],                   rate: 2.8, cap: 90 },
-      { at: 105, spawn: [['en_charger', 7], ['en_bat', 6], ['en_stinger', 4]],  rate: 3.4, cap: 110 },
+      { at: 105, spawn: [['en_charger', 6], ['en_revenant', 4], ['en_bat', 5]],  rate: 3.4, cap: 110 },
     ],
     // ★最初のボス。ここで「装備が足りない」を体感させる
     boss: { id: 'bs_gorehorn', at: 150 },
@@ -54,7 +54,7 @@ export const STAGES = [
     waves: [
       { at: 0,   spawn: [['en_blob', 8], ['en_slime', 5]],                      rate: 2.4, cap: 75 },
       { at: 55,  spawn: [['en_blob', 8], ['en_stinger', 6]],                    rate: 3.0, cap: 100 },
-      { at: 115, spawn: [['en_blob', 7], ['en_charger', 6], ['en_brute', 5]],   rate: 3.6, cap: 120 },
+      { at: 115, spawn: [['en_blob', 7], ['en_lantern', 5], ['en_brute', 5]],   rate: 3.6, cap: 120 },
     ],
     boss: null,
     scaling: { hp: 2.35, atk: 1.70 },
@@ -65,8 +65,8 @@ export const STAGES = [
     id: 5, name: '雷鳴の尖塔', duration: 180,
     waves: [
       { at: 0,   spawn: [['en_stinger', 9], ['en_bat', 6]],                     rate: 2.6, cap: 85 },
-      { at: 60,  spawn: [['en_stinger', 8], ['en_charger', 7]],                 rate: 3.4, cap: 110 },
-      { at: 125, spawn: [['en_charger', 8], ['en_brute', 6], ['en_blob', 5]],   rate: 4.0, cap: 135 },
+      { at: 60,  spawn: [['en_stinger', 7], ['en_serpent', 4], ['en_charger', 6]], rate: 3.4, cap: 110 },
+      { at: 125, spawn: [['en_serpent', 6], ['en_revenant', 6], ['en_brute', 5]], rate: 4.0, cap: 135 },
     ],
     boss: { id: 'bs_gorehorn', at: 170 },
     scaling: { hp: 3.00, atk: 1.94 },
@@ -78,7 +78,7 @@ export const STAGES = [
     waves: [
       { at: 0,   spawn: [['en_brute', 8], ['en_charger', 6]],                   rate: 2.8, cap: 95 },
       { at: 65,  spawn: [['en_brute', 8], ['en_blob', 7], ['en_stinger', 6]],   rate: 3.6, cap: 120 },
-      { at: 135, spawn: [['en_charger', 9], ['en_brute', 8], ['en_bat', 6]],    rate: 4.4, cap: 145 },
+      { at: 135, spawn: [['en_revenant', 8], ['en_brute', 8], ['en_lantern', 5]], rate: 4.4, cap: 145 },
     ],
     boss: null,
     scaling: { hp: 3.75, atk: 2.18 },
@@ -89,8 +89,8 @@ export const STAGES = [
     id: 7, name: '虚無の縁', duration: 200,
     waves: [
       { at: 0,   spawn: [['en_bat', 8], ['en_stinger', 8]],                     rate: 3.0, cap: 100 },
-      { at: 70,  spawn: [['en_charger', 8], ['en_blob', 8], ['en_brute', 6]],   rate: 3.8, cap: 130 },
-      { at: 145, spawn: [['en_brute', 9], ['en_charger', 9], ['en_stinger', 7]],rate: 4.6, cap: 155 },
+      { at: 70,  spawn: [['en_serpent', 7], ['en_blob', 7], ['en_lantern', 6]], rate: 3.8, cap: 130 },
+      { at: 145, spawn: [['en_revenant', 9], ['en_serpent', 8], ['en_brute', 7]],rate: 4.6, cap: 155 },
     ],
     boss: null,
     scaling: { hp: 4.60, atk: 2.42 },
@@ -102,7 +102,7 @@ export const STAGES = [
     waves: [
       { at: 0,   spawn: [['en_brute', 8], ['en_stinger', 7], ['en_bat', 6]],    rate: 3.2, cap: 110 },
       { at: 75,  spawn: [['en_charger', 9], ['en_blob', 8], ['en_brute', 8]],   rate: 4.2, cap: 140 },
-      { at: 160, spawn: [['en_charger', 10], ['en_brute', 9], ['en_stinger', 8]], rate: 5.0, cap: 170 },
+      { at: 160, spawn: [['en_revenant', 10], ['en_serpent', 9], ['en_lantern', 7]], rate: 5.0, cap: 170 },
     ],
     // ★最終ボス。SSR装備 + 限界突破が前提の難度
     boss: { id: 'bs_voidmaw', at: 205 },

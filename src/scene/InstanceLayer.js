@@ -12,7 +12,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { lerp, wrapAngle } from '../core/math.js';
 import { withRim } from './materials.js';
 import { makeGlowTexture } from './textures.js';
-import { makeEnemyGeometry } from './geometry.js';
+import { makeEnemyGeometry } from './enemyShapes.js';
 
 // ★毎フレーム new しない。全部モジュールスコープで使い回す
 const _m = new THREE.Matrix4();
@@ -36,9 +36,19 @@ const RIM_BY_GEOM = {
   octa:    { color: 0xdcf0ff, power: 3.0, strength: 0.42 },
   cone:    { color: 0xdcf0ff, power: 3.2, strength: 0.38 },
   capsule: { color: 0xdcf0ff, power: 3.4, strength: 0.55 },
-  box:     { color: 0xbcd8ff, power: 4.5, strength: 0.24 },
-  wedge:   { color: 0xbcd8ff, power: 4.5, strength: 0.24 },
+  box:      { color: 0xbcd8ff, power: 4.5, strength: 0.24 },
+  wedge:    { color: 0xbcd8ff, power: 4.5, strength: 0.24 },
+  revenant: { color: 0xbcd8ff, power: 4.2, strength: 0.28 },
+  lantern:  { color: 0xffd0a8, power: 3.2, strength: 0.44 },
+  serpent:  { color: 0xbcd8ff, power: 4.0, strength: 0.30 },
 };
+
+/**
+ * ★被弾フラッシュの行き先。
+ *   頂点カラーで塗るようにしたので instanceColor の平常値は白（＝素通し）。
+ *   白へ寄せても何も起きないので、1を超える値まで持ち上げて白飛びさせる。
+ */
+const FLASH = new THREE.Color(3.0, 3.0, 3.0);
 
 export class InstanceLayer {
   /**
@@ -57,13 +67,14 @@ export class InstanceLayer {
     // ---- 敵：アーキタイプごとに1つ ----
     this.enemyIMs = ENEMIES.map(arch => {
       const im = new THREE.InstancedMesh(
-        makeEnemyGeometry(arch.visual.geom),
-        // ★マテリアルの色は白にしておく。実際の色は instanceColor で与える。
-        //   こうしないと「被弾で白く光らせる」ができない（乗算では明るくできない）。
+        makeEnemyGeometry(arch.visual.geom, arch.visual.pal),
+        // ★1体の中の塗り分け（黒い装甲・深紅の核・骨の角）は頂点カラーで持つ。
+        //   instanceColor は被弾フラッシュ専用にした。
+        //   素直にマテリアルを分けると、アーキタイプごとに何枚も要る。
         // ★リムライトで輪郭を起こす。暗い床の上で敵の形が読めるかどうかは
         //   ここで決まる（塗りだけだとシルエットが潰れる）。
         withRim(
-          new THREE.MeshLambertMaterial({ color: 0xffffff }),
+          new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }),
           RIM_BY_GEOM[arch.visual.geom] || RIM_BY_GEOM.box
         ),
         enemies.cap
@@ -72,9 +83,8 @@ export class InstanceLayer {
       im.castShadow = true;
       im.receiveShadow = false;      // 雑魚に落ちる影は見えない。描画負荷だけ増える
       im.count = 0;
-      // ★本体は暗く落とす。鮮やかな色は下に敷いた光の輪が受け持つ。
-      //   本体まで明るいと「色つきの積み木」に見えて、暗い舞台から浮いてしまう。
-      im.__color = new THREE.Color(arch.visual.color).multiplyScalar(0.62);
+      // 平常時は素通し（白）。塗りはジオメトリの頂点カラーが持っている
+      im.__color = new THREE.Color(1, 1, 1);
       im.__scale = arch.visual.scale;
       im.__hover = arch.visual.hover || 0;
       im.__glow = new THREE.Color(arch.visual.glow || arch.visual.color);
@@ -214,7 +224,7 @@ export class InstanceLayer {
       // ★真っ白まで飛ばすと敵の種類が読めなくなるので上限を抑え、
       //   二乗で減衰させて「一瞬光る」形にする
       const f = e.flash > 0 ? e.flash : 0;
-      im.setColorAt(n, _c.copy(im.__color).lerp(WHITE, f * f * 0.7));
+      im.setColorAt(n, _c.copy(im.__color).lerp(FLASH, f * f * 0.7));
 
       // 足元に敷く光。被弾すると強くなる
       const gi = this.enemyGlows[e.archIndex];

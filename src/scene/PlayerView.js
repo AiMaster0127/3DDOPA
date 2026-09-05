@@ -9,10 +9,17 @@ import { BALANCE } from '../data/balance.js';
 import { lerp, wrapAngle, damp } from '../core/math.js';
 import { withRim, makeGlowSprite } from './materials.js';
 import { makeGlowTexture, makeBlobTexture } from './textures.js';
-import { makeWeaponGeometry } from './geometry.js';
+import { makeWeaponGeometry } from './weaponShapes.js';
+import { makeCharacterGeometry } from './character.js';
 
-const ACCENT = 0x43e8ff;
-const ACCENT2 = 0xff3ea5;
+/**
+ * ★自機の信号色。キャラを変えても**これだけは変えない**。
+ *   敵は深紅・琥珀・翠・紫の発光核を持つ。自機の足元まで同じ色にすると、
+ *   乱戦で自分と敵が混ざる（実際、深紅にしたら見分けが付かなくなった）。
+ *   金白は敵のどの核とも被らず、設定画の金の装飾とも揃う。
+ */
+const SIGNAL = 0xffd86a;
+const ACCENT = SIGNAL;
 
 export class PlayerView {
   constructor(scene) {
@@ -23,60 +30,53 @@ export class PlayerView {
 
     const p = BALANCE.player;
 
-    // ★床が濃紺なので、自機は「ほぼ白 + 発光アクセント」にして最大コントラストを取る。
-    //   青系にすると床に溶けて、乱戦時に自分を見失う。
-    this.torsoMat = withRim(new THREE.MeshStandardMaterial({
-      color: 0xe4ebf7, roughness: 0.42, metalness: 0.25,
+    // ★体は頂点カラーで塗る。黒レザー・深紅の裏地・肌・髪・金具を
+    //   1体2メッシュ（マット／金属）に収めるため。素直に分けると5 draw call になる。
+    // ★リムライトを強めに掛ける。暗い衣装なので、輪郭光が無いと
+    //   乱戦で自機が床の影と区別できなくなる。
+    this.matteMat = withRim(new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.62, metalness: 0.08,
+      side: THREE.DoubleSide,          // コートの裏地を内側から見せるため
       emissive: 0xff2b2b, emissiveIntensity: 0,      // 被弾時だけ光らせる
-    }), { color: 0x9fd8ff, power: 2.6, strength: 0.85 });
-    const torso = new THREE.Mesh(
-      new THREE.CapsuleGeometry(p.radius, p.height * 0.5, 4, 12), this.torsoMat
-    );
-    torso.position.y = p.height * 0.5;
-    torso.castShadow = true;
+      // ★リムは弱く、鋭く。強く掛けると黒レザーが全面白飛びして
+      //   「光る人形」になり、衣装の質感が丸ごと消える（実際そうなった）
+    }), { color: 0x9fd8ff, power: 3.6, strength: 0.30 });
 
-    // 胸のコア。発光させて暗所でも位置が判るようにする
-    const core = new THREE.Mesh(
-      new THREE.BoxGeometry(0.26, 0.26, 0.12),
-      new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 1.6 })
-    );
-    core.position.set(0, p.height * 0.62, p.radius * 0.92);
+    this.metalMat = withRim(new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.28, metalness: 0.85,
+      emissive: 0xff2b2b, emissiveIntensity: 0,
+    }), { color: 0xffe6b0, power: 2.6, strength: 0.34 });
 
-    const head = new THREE.Mesh(
-      new THREE.SphereGeometry(p.radius * 0.6, 14, 10),
-      new THREE.MeshStandardMaterial({ color: 0xf6e6cf, roughness: 0.7 })
-    );
-    head.position.y = p.height * 1.02;
-    head.castShadow = true;
-
-    // ★向きの明示。見下ろし視点では体型だけだと正面が判らないので必ず入れる。
-    //   床にも自機の白にも無い色（マゼンタ）を使い、一瞬で読み取れるようにする
-    const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.19, 0.6, 8),
-      new THREE.MeshStandardMaterial({ color: ACCENT2, emissive: ACCENT2, emissiveIntensity: 1.4 })
-    );
-    nose.rotation.x = Math.PI / 2;                    // +Z（正面）を向かせる
-    nose.position.set(0, p.height * 0.82, p.radius + 0.24);
+    const geo = makeCharacterGeometry();
+    this.charMatte = new THREE.Mesh(geo.matte, this.matteMat);
+    this.charMetal = new THREE.Mesh(geo.metal, this.metalMat);
+    this.charMatte.castShadow = true;
+    this.charMetal.castShadow = true;
 
     // 武器。フェーズ4で装備中の武器データに応じて色・形を差し替える
     this.weaponPivot = new THREE.Group();             // 振り回すための回転軸
-    this.weaponPivot.position.y = p.height * 0.55;
+    this.weaponPivot.position.y = 0.72;      // チビ体型の手の高さ
+    // ★刃・柄巻き・鍔の塗り分けは頂点カラーで持つ。マテリアルは白1枚。
+    //   3枚に分けると、装備するだけで draw call が3倍になる。
     this.weaponMat = withRim(
-      new THREE.MeshStandardMaterial({ color: 0xc9d4e2, roughness: 0.3, metalness: 0.65 }),
-      { color: 0xbfe8ff, power: 2.2, strength: 0.9 }
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff, vertexColors: true, roughness: 0.34, metalness: 0.6,
+      }),
+      { color: 0xbfe8ff, power: 2.6, strength: 0.5 }
     );
     this.weapon = new THREE.Mesh(makeWeaponGeometry('sword'), this.weaponMat);
-    this.weapon.position.set(p.radius + 0.14, 0, 0.15);
-    this.weapon.rotation.x = -0.28;
+    this.weapon.position.set(0.42, -0.06, 0.16);
+    // 設定画に合わせて斜めに提げる。真正面から見ると刀身が奥へ潰れるので、
+    // 少し外へ振っておく
+    this.weapon.rotation.set(-0.42, -0.30, 0);
     this.weapon.castShadow = true;
     this.weaponPivot.add(this.weapon);
-    this._weaponModel = 'sword';
+    this._weaponKey = '';
 
-    this.body.add(torso, core, head, nose, this.weaponPivot);
-
-    // キャラ切り替えで色を差し替えるために持っておく
-    this.coreMat = core.material;
-    this.noseMat = nose.material;
+    // ★主役は雑魚より一回り大きく。等倍だとスライムに埋もれる
+    this.charMatte.scale.setScalar(1.18);
+    this.charMetal.scale.setScalar(1.18);
+    this.body.add(this.charMatte, this.charMetal, this.weaponPivot);
 
     // 影オフのティア用の簡易影。シャドウマップより桁違いに安い
     this.blob = new THREE.Mesh(
@@ -148,7 +148,7 @@ export class PlayerView {
 
     // 胸のコアの光。自機の位置を点で示す
     this.coreGlow = makeGlowSprite(this.glowTex, ACCENT, 2.1, 0.85);
-    this.coreGlow.position.set(0, p.height * 0.66, 0);
+    this.coreGlow.position.set(0, 1.02, 0);
     this.group.add(this.coreGlow);
 
     // ★近接攻撃の斬撃範囲。装飾ではなく「どこまで届くか」を示す機能。
@@ -174,34 +174,35 @@ export class PlayerView {
    */
   setCharacter(character) {
     const v = character.visual;
-    this.torsoMat.color.setHex(v.body);
-    this.coreMat.color.setHex(v.accent);
-    this.coreMat.emissive.setHex(v.accent);
-    this.noseMat.color.setHex(v.nose);
-    this.noseMat.emissive.setHex(v.nose);
-    this.aura.material.color.setHex(v.accent);
-    this.auraRing.material.color.setHex(v.accent);
-    this.auraOuter.material.color.setHex(v.accent);
-    this.dirMat.color.setHex(v.accent);
-    this.coreGlow.material.color.setHex(v.accent);
-    this.arcMat.color.setHex(v.accent);
+    // ★キャラごとに造形から作り直す。色替えだけでは
+    //   「同じ人形の色違い」にしか見えず、選ぶ理由が生まれない。
+    //   選択は拠点でしか起きないので、その都度作ってよい。
+    this.charMatte.geometry.dispose();
+    this.charMetal.geometry.dispose();
+    const geo = makeCharacterGeometry(v);
+    this.charMatte.geometry = geo.matte;
+    this.charMetal.geometry = geo.metal;
+
+    // ★足元の光・向きの三角・斬撃範囲の色は変えない。
+    //   ここはキャラの個性ではなく「自分がどこにいるか」を伝える計器。
   }
 
   /** 装備武器が変わったら見た目と斬撃範囲を作り直す（頻度が低いので毎回作ってよい）。 */
   setWeapon(weapon) {
-    this.weaponMat.color.setHex(weapon.visual.color);
     this.weaponMat.emissive.setHex(weapon.visual.emissive || 0x000000);
     this.weaponMat.emissiveIntensity = weapon.visual.emissive ? 0.8 : 0;
 
-    // ★武器ごとに形を作り直す。引いた武器が違って見えないとガチャの意味が半減する。
-    //   装備変更は頻度が低いので、その都度作ってよい。
+    // ★武器ごとに形と配色を作り直す。引いた武器が違って見えないと
+    //   ガチャの意味が半減する。装備変更は頻度が低いので、その都度作ってよい。
     const model = weapon.visual.model || 'sword';
-    if (model !== this._weaponModel) {
-      this._weaponModel = model;
+    const geoKey = model + '|' + JSON.stringify(weapon.visual.pal || 0);
+    if (geoKey !== this._weaponKey) {
+      this._weaponKey = geoKey;
       this.weapon.geometry.dispose();
-      this.weapon.geometry = makeWeaponGeometry(model);
+      this.weapon.geometry = makeWeaponGeometry(model, weapon.visual.pal);
     }
-    this.weapon.scale.setScalar(weapon.visual.scale || 1);
+    // ★自機を1.18倍にしたので、武器も同じ倍率を掛けないと手だけ小さく見える
+    this.weapon.scale.setScalar((weapon.visual.scale || 1) * 1.18);
 
     const isMelee = weapon.attack.kind === 'melee_arc';
     this.arc.visible = false;
@@ -242,8 +243,8 @@ export class PlayerView {
     this.body.rotation.x = damp(this.body.rotation.x, player.speed01 * 0.13, 9, dt);
 
     // 走行中だけオーラを強める（速度のフィードバック）
-    this.aura.material.opacity = 0.42 + player.speed01 * 0.34;
-    this.auraRing.material.opacity = 0.55 + player.speed01 * 0.4;
+    this.aura.material.opacity = 0.55 + player.speed01 * 0.34;
+    this.auraRing.material.opacity = 0.72 + player.speed01 * 0.28;
     this.coreGlow.material.opacity = 0.7 + player.speed01 * 0.3;
 
     // 外周リングはゆっくり脈打たせる。静止していても「生きている」感じが出る
@@ -265,7 +266,9 @@ export class PlayerView {
 
     // ---- 被弾中の赤い明滅。無敵時間が視覚的に判る ----
     const inv = player.iframe > 0;
-    this.torsoMat.emissiveIntensity = inv ? 0.35 + Math.sin(performance.now() * 0.05) * 0.3 : 0;
+    const flash = inv ? 0.35 + Math.sin(performance.now() * 0.05) * 0.3 : 0;
+    this.matteMat.emissiveIntensity = flash;
+    this.metalMat.emissiveIntensity = flash;
 
     // ---- 死亡：倒れる ----
     this.body.rotation.z = damp(this.body.rotation.z, player.dead ? Math.PI * 0.42 : 0, 6, dt);
