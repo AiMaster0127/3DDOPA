@@ -7,7 +7,7 @@
  * ★リリースのたびに CACHE のバージョンを上げること。
  *   上げないと古いキャッシュが残り、更新が反映されない。
  */
-const CACHE = 'dopa-arena-v4';
+const CACHE = 'dopa-arena-v5';
 
 const PRECACHE = [
   './',
@@ -70,6 +70,7 @@ const PRECACHE = [
   './src/scene/SceneManager.js',
   './src/scene/CameraRig.js',
   './src/scene/Arena.js',
+  './src/scene/Podium.js',
   './src/scene/PlayerView.js',
   './src/scene/BossView.js',
   './src/scene/InstanceLayer.js',

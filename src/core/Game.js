@@ -12,6 +12,7 @@ import { Quality, TIERS } from '../scene/Quality.js';
 import { SceneManager } from '../scene/SceneManager.js';
 import { CameraRig } from '../scene/CameraRig.js';
 import { Arena } from '../scene/Arena.js';
+import { Podium } from '../scene/Podium.js';
 import { themeForStage } from '../data/themes.js';
 import { PlayerView } from '../scene/PlayerView.js';
 import { InstanceLayer } from '../scene/InstanceLayer.js';
@@ -96,6 +97,8 @@ export class Game {
     // ---- 描画 ----
     this.scene = new SceneManager(canvas, TIERS[initialTier].aa);
     this.arena = new Arena(this.scene.scene);
+    // 拠点の展示台。★ここでしかキャラと武器を見せられない
+    this.podium = new Podium(this.scene.scene, this.arena.theme);
     this.playerView = new PlayerView(this.scene.scene);
     this.bossView = new BossView(this.scene.scene);
     this.cameraRig = new CameraRig(this.scene.camera);
@@ -222,6 +225,7 @@ export class Game {
       this.playerView.applyQuality(tier);
       this.instances.applyQuality(tier);
       this.arena.applyQuality(tier);
+      this.podium.applyQuality(tier);
       this.sparks.applyQuality(tier);
       this.shock.applyQuality(tier);
       this.damageNumbers.applyQuality(tier);
@@ -453,6 +457,7 @@ export class Game {
   _applyTheme(stageId) {
     const theme = themeForStage(stageId);
     this.arena.setTheme(theme);
+    this.podium.setTheme(theme);
     this.scene.applyTheme(theme);
   }
 
@@ -484,6 +489,7 @@ export class Game {
     this.meta.checkAchievements();
     // 解放されたキャラの反映（見た目とステータス）
     this.playerView.setCharacter(this.meta.character);
+    this.podium.show();
     this.homeUI.setStage(STAGE_BY_ID.get(this.stageId));
     this.homeUI.setAchievementProgress(this.metaUI.progressText());
     this.homeUI.show();
@@ -506,6 +512,9 @@ export class Game {
     this.state = STATE.PLAYING;
     this.elapsed = 0;
     this.frame = 0;
+
+    this.podium.hide();
+    this.playerView.leaveShowcase();     // ★これを忘れると台座の高さのまま走る
 
     this.runGems = 0;
 
@@ -668,7 +677,7 @@ export class Game {
     // 演出は実時間で進める（論理の固定ステップとは独立でよい）
     if (this.gachaDirector.running) this.gachaDirector.update(dt);
 
-    this.playerView.sync(this.player, alpha, dt);
+    if (this.state !== STATE.HOME) this.playerView.sync(this.player, alpha, dt);
     this.instances.sync(alpha, this.scene.camera);
 
     this.arena.update(dt, this.scene.camera);
@@ -678,10 +687,16 @@ export class Game {
 
     this.sparks.update(dt);
     this.shock.update(dt);
-    // 拠点では舞台を見せるカメラに切り替える。戦闘の視点では景色が画面に入らない
-    if (this.state === STATE.HOME) this.cameraRig.showcase(dt, this.arena.radius);
-    else this.cameraRig.follow(this.player, dt);
-    this.scene.syncShadow(this.player.x, this.player.z);
+    // 拠点では台座の上の自機を見せる。戦闘の見下ろし視点ではキャラも武器も見えない
+    if (this.state === STATE.HOME) {
+      this.podium.update(dt);
+      this.playerView.showcase(dt, this.podium.topY);
+      this.cameraRig.showcase(dt, this.scene.camera.aspect);
+      this.scene.syncShadow(0, 0);
+    } else {
+      this.cameraRig.follow(this.player, dt);
+      this.scene.syncShadow(this.player.x, this.player.z);
+    }
 
     this.scene.render();
     this.damageNumbers.update(dt, this.scene.camera);

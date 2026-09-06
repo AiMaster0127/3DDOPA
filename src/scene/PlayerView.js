@@ -227,6 +227,66 @@ export class PlayerView {
   }
 
   /**
+   * 拠点の展示ポーズ。台座の上に立たせ、ゆっくり回して見せる。
+   *
+   * ★戦闘の同期（sync）とは別経路にする。Player の座標も速度も向きも
+   *   拠点では意味が無く、混ぜると「出撃していないのに走っている」画になる。
+   * ★武器は体の脇へ張り出させる。真横に構えないと、
+   *   引いた武器の形がシルエットに出ない（＝ガチャの手応えが消える）。
+   *
+   * @param {number} dt   実フレーム時間
+   * @param {number} topY 台座の天面（＝足元の高さ）
+   */
+  showcase(dt, topY) {
+    this._show = (this._show || 0) + dt;
+    const t = this._show;
+
+    this.group.position.set(0, topY, 0);
+    this.group.rotation.y = t * 0.30;          // 20秒強で一周。速いと形が読めない
+
+    // 呼吸。上下0.03の微動でも「立っている人」に見える
+    this.body.position.y = Math.sin(t * 1.35) * 0.03;
+    this.body.rotation.x = 0;
+    this.body.rotation.z = 0;
+
+    // 武器を体の外へ振り出し、刃を立てて構える。
+    // ★戦闘の提げ方（背後へ倒す）のままだと、刀身が体に重なって形が読めない。
+    this.weaponPivot.rotation.y = -1.02 + Math.sin(t * 0.9) * 0.04;
+    this.weapon.rotation.set(-1.02, -0.30, 0);
+
+    // ★足元の演出は全部消す。あれは「乱戦で自分を見失わないための計器」で、
+    //   広い加算グロー（4ユニット四方）が台座ごと白く覆ってしまう（実際そうなった）。
+    //   台座には縁光があるので、立ち位置の表示はそちらに任せる。
+    this.aura.visible = false;
+    this.auraRing.visible = false;
+    this.auraOuter.visible = false;
+    this.dirMark.visible = false;
+    this.blob.visible = false;
+
+    this.coreGlow.visible = true;
+    this.coreGlow.material.opacity = 0.55;
+
+    this.arc.visible = false;
+    this.arcMat.opacity = 0;
+    this.matteMat.emissiveIntensity = 0;
+    this.metalMat.emissiveIntensity = 0;
+  }
+
+  /** 出撃時に展示ポーズの痕跡を消す。★これを忘れると空中に浮いたまま走る。 */
+  leaveShowcase() {
+    this.group.position.y = 0;
+    this.body.position.y = 0;
+    this.weaponPivot.rotation.y = 0;
+    this.weapon.rotation.set(-0.42, -0.30, 0);
+    this.aura.visible = true;
+    this.auraRing.visible = true;
+    this.auraOuter.visible = true;
+    this.dirMark.visible = true;
+    this._show = 0;
+    // 簡易影は品質ティアが決める。ここで勝手に戻さない
+  }
+
+  /**
    * @param {import('../entities/Player.js').Player} player
    * @param {number} alpha  前フレームからの補間係数（0..1）
    * @param {number} dt     実フレーム時間（演出のみに使う）

@@ -925,6 +925,75 @@ check(chars.affinity.bowRanger > chars.affinity.bowVanguard &&
       `剣: レンジャー ${chars.affinity.swordRanger} < ヴァンガード ${chars.affinity.swordVanguard}`);
 check(chars.saved === 'ch_ranger', '選んだキャラがセーブに残る', chars.saved);
 
+// ---- 拠点でキャラと武器が見えるか ----
+// ★戦闘の見下ろし視点ではキャラは頭と肩しか映らない。
+//   引いた武器も選んだキャラも、拠点で見せなければ一度も見えないまま終わる。
+//   「台座の上に、画面に対して十分な大きさで映っているか」を数字で確かめる。
+const showcase = await page.evaluate(async () => {
+  const THREE = await import('/vendor/three/three.module.min.js');
+  const g = __DOPA.game;
+  g.goHome();
+  // 展示カメラは render() で動く。数フレーム回して落ち着かせる
+  await new Promise(r => setTimeout(r, 500));
+  g.render(1, 1 / 60);
+
+  const cam = g.scene.camera;
+  // ★実際の見た目の箱で測る。決め打ちの高さで測ると、髪や武器がはみ出ても気付けない
+  const box = new THREE.Box3().setFromObject(g.playerView.body);
+  const ndc = (y) => new THREE.Vector3(0, y, 0).project(cam);
+  const feet = ndc(box.min.y);
+  const head = ndc(box.max.y);
+
+  return {
+    podium: g.podium.group.visible,
+    footY: g.playerView.group.position.y,
+    // 画面に占める高さ（0..1）
+    height: Math.abs(head.y - feet.y) / 2,
+    inside: Math.abs(feet.x) < 1 && Math.abs(head.x) < 1 &&
+            Math.abs(feet.y) < 1 && Math.abs(head.y) < 1 &&
+            feet.z < 1,
+    ndcX: +((feet.x + head.x) / 2).toFixed(2),
+    ndcY: +((feet.y + head.y) / 2).toFixed(2),
+    wide: cam.aspect >= 1.05,
+    weaponVisible: g.playerView.weapon.visible,
+    // 足元の計器（乱戦用の広いグロー）は台座では消す
+    auraOff: !g.playerView.aura.visible && !g.playerView.dirMark.visible,
+    draws: g.scene.drawCalls,
+  };
+});
+
+check(showcase.podium && showcase.footY > 0.5,
+      '拠点ではキャラが台座の上に立つ',
+      `台座 ${showcase.podium} / 足元の高さ ${showcase.footY.toFixed(2)}`);
+// ★20%を下回ると「遠くに人が立っている」画になり、衣装も武器も読めなくなる
+check(showcase.inside && showcase.height > 0.20,
+      'キャラが拠点の画面内に大きく映る',
+      `画面高さの ${(showcase.height * 100).toFixed(0)}%（枠内 ${showcase.inside}）`);
+// ★中央に置くとUIの裏に隠れる。横長は左、縦長は上へ逃がしてあること
+check(showcase.wide ? showcase.ndcX < -0.08 : showcase.ndcY > 0.08,
+      'キャラがUIと重ならない位置に寄る',
+      `${showcase.wide ? '横長 → 左' : '縦長 → 上'} / NDC (${showcase.ndcX}, ${showcase.ndcY})`);
+check(showcase.weaponVisible && showcase.auraOff,
+      '装備した武器が見え、戦闘用の足元表示は消える',
+      `武器 ${showcase.weaponVisible} / 足元オフ ${showcase.auraOff}`);
+
+// 出撃したら台座を畳んで地面に戻ること。★戻し忘れると空中を走る
+const sortie = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  g.startRun();
+  await new Promise(r => setTimeout(r, 260));
+  g.render(1, 1 / 60);
+  return {
+    podium: g.podium.group.visible,
+    footY: g.playerView.group.position.y,
+    aura: g.playerView.aura.visible && g.playerView.dirMark.visible,
+    state: g.state,
+  };
+});
+check(!sortie.podium && sortie.footY === 0 && sortie.aura && sortie.state === 'playing',
+      '出撃すると台座が消えて地面に戻る',
+      `台座 ${sortie.podium} / 足元 ${sortie.footY} / 計器 ${sortie.aura}`);
+
 check(st.draws <= 100, 'draw call が予算内', `${st.draws} <= 100`);
 check(st.tris <= 60000, '三角形数が予算内', `${st.tris} <= 60000`);
 check(st.hudFits, 'HUDが画面内に収まる', `${st.css} / 描画バッファ ${st.buf} / DPR ${st.dpr} / 垂直FOV ${st.fov} / ティア ${st.tier}`);

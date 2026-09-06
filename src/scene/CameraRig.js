@@ -11,6 +11,30 @@ import { damp } from '../core/math.js';
 const _desired = new THREE.Vector3();   // ★毎フレーム new しない
 const _look = new THREE.Vector3();
 
+/**
+ * 拠点の据え方。
+ *
+ * ★距離を数字で決め打ちにしない。垂直FOVは画面の縦横比で変わる
+ *   （_applyFov が縦持ちで 52°→70° まで広げる）ので、固定距離だと
+ *   縦持ちだけ被写体が小さくなる。「画面高さの何割を占めるか」から距離を逆算する。
+ *
+ * frac   : 台座＋キャラが画面高さに占める割合
+ * shiftX : 注視点を右へ逃がす量（画面**横**半分に対する割合）→ 被写体は左へ
+ * shiftY : 注視点を下へ逃がす量（画面**縦**半分に対する割合）→ 被写体は上へ
+ */
+/**
+ * 被写体（台座＋キャラ）の全高。★実測値。
+ * 台座 0.98 ＋ 髪の角の先まで 2.30。目分量で置くと頭が画面外へ出る。
+ */
+const SUBJ_H = 3.30;
+
+const SHOW = {
+  // 横長：UIは右半分。被写体を左へ逃がす
+  wide: { frac: 0.50, shiftX: 0.42, shiftY: 0.24 },
+  // 縦長：UIは下半分。被写体を上へ逃がす
+  tall: { frac: 0.40, shiftX: 0.00, shiftY: 0.40 },
+};
+
 export class CameraRig {
   constructor(camera) {
     this.camera = camera;
@@ -60,22 +84,42 @@ export class CameraRig {
   }
 
   /**
-   * 拠点で舞台をゆっくり見せるカメラ。
+   * 拠点で「主役」を見せるカメラ。
    *
-   * ★戦闘中の見下ろし視点では、舞台の縁も尖塔も遠景も画面に入らない
-   *   （俯角62度だと、地面は約26m先で画面の上端に消える）。
-   *   作り込んだ景色を一度も見せないのは設計として間違っているので、
-   *   拠点にいる間だけ引いて回し、ステージを「見せる」。
+   * ★戦闘の見下ろし視点では、キャラは頭と肩しか映らない（俯角62度）。
+   *   引いた武器も選んだキャラも見えないままなので、拠点だけ寄って撮る。
+   * ★被写体を画面の中央に置かない。中央はUIが占めるので、
+   *   横長では左へ、縦長では上へ寄せる。
+   *   カメラを平行移動させると背景まで一緒にズレるので、
+   *   **注視点だけ**をカメラの右方向へ逃がして被写体を反対側へ追い出す。
+   * ★アリーナと遠景も画に残す。台座だけ大写しにすると、
+   *   作り込んだ景色を拠点でも見せられなくなる。
+   *
+   * @param {number} dt
+   * @param {number} aspect 画面のアスペクト比
    */
-  showcase(dt, radius) {
-    this.orbit = (this.orbit || 0) + dt * 0.085;
-    const d = radius * 1.42;   // 遠景の塔（半径84〜）の内側に収める
-    this.camera.position.set(
-      Math.sin(this.orbit) * d,
-      radius * 0.66 + Math.sin(this.orbit * 0.7) * radius * 0.10,
-      Math.cos(this.orbit) * d
-    );
-    this.camera.lookAt(0, 3.5, 0);
+  showcase(dt, aspect) {
+    const focusY = SUBJ_H * 0.5;
+    this.orbit = (this.orbit || 0) + dt * 0.10;
+
+    const S = aspect >= 1.05 ? SHOW.wide : SHOW.tall;
+
+    // 画面の縦半分に写る世界の高さ → そこから距離を逆算する
+    const half = SUBJ_H / (2 * S.frac);
+    const d = half / Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
+
+    // 正面付近を±22度だけ往復する。一周させると背中を向ける時間が長すぎる
+    const a = Math.sin(this.orbit) * 0.38;
+    const cx = Math.sin(a) * d;
+    const cz = Math.cos(a) * d;
+    this.camera.position.set(cx, focusY + d * 0.15, cz);
+
+    // 注視点をカメラの右へ逃がす → 被写体は画面の左へ寄る。
+    // 縦長では横に逃がす余地が無いので、代わりに下へ逃がして被写体を上げる。
+    // カメラ→原点 の水平右ベクトル（Y軸まわりに90度回すだけ）
+    const rx = cz / d, rz = -cx / d;
+    const sx = S.shiftX * half * aspect;
+    this.camera.lookAt(rx * sx, focusY - S.shiftY * half, rz * sx);
     this._init = false;          // 出撃時に追従を撮り直させる
   }
 

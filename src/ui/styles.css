@@ -296,6 +296,37 @@ html, body {
       rgba(5, 6, 16, .72) 78%,
       rgba(5, 6, 16, .95) 100%);
 }
+
+/* ★拠点の幕は「文字のある側」だけに掛ける。
+   上下一律に掛けると、主役のキャラまで半分の明るさに落ちる（実際そうなった）。
+   キャラの居る側は透かし、UIの側だけ濃くする。 */
+@media (min-aspect-ratio: 105/100) {
+  #home {
+    background:
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(90, 140, 255, .022) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(90, 140, 255, .022) 39px 40px),
+      linear-gradient(180deg, rgba(5, 6, 16, .78) 0%, rgba(5, 6, 16, 0) 13%,
+                              rgba(5, 6, 16, 0) 88%, rgba(5, 6, 16, .70) 100%),
+      linear-gradient(90deg,
+        rgba(5, 6, 16, .10) 0%,
+        rgba(5, 6, 16, .10) 40%,
+        rgba(5, 6, 16, .68) 62%,
+        rgba(5, 6, 16, .90) 100%);
+  }
+}
+@media (max-aspect-ratio: 105/100) {
+  #home {
+    background:
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(90, 140, 255, .022) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(90, 140, 255, .022) 39px 40px),
+      linear-gradient(180deg,
+        rgba(5, 6, 16, .82) 0%,
+        rgba(5, 6, 16, .14) 12%,
+        rgba(5, 6, 16, .14) 40%,
+        rgba(5, 6, 16, .74) 58%,
+        rgba(5, 6, 16, .95) 100%);
+  }
+}
 /* 透けた背景の上でも見出しが沈まないように、文字側の影を強める */
 #home .home-title { filter: drop-shadow(0 0 26px rgba(67, 232, 255, .45)) drop-shadow(0 2px 10px rgba(0, 0, 0, .9)); }
 #home .home-sub, #home .home-foot, #stages .panel-title { text-shadow: 0 2px 8px rgba(0, 0, 0, .85); }
@@ -318,6 +349,38 @@ html, body {
 .home-main {
   flex: 1 1 auto;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+}
+
+/* ★拠点の主役は台座の上のキャラ。UIを画面中央に置くと必ず被る。
+   横長では右半分へ、縦長では下半分へ寄せて、主役の居場所を空ける。
+   カメラ側も同じ想定で被写体を逃がしている（CameraRig.showcase）。
+   ずらす向きを片方だけ変えると、キャラがボタンの裏に隠れる。 */
+@media (min-aspect-ratio: 105/100) {
+  #home .home-main {
+    align-items: flex-end;
+    padding-right: clamp(8px, 4vw, 64px);
+  }
+  #home .home-title, #home .home-equip, #home .home-best { text-align: right; }
+  #home .home-row { justify-content: flex-end; }
+}
+@media (max-aspect-ratio: 105/100) {
+  #home .home-main { justify-content: flex-end; padding-bottom: 2vh; gap: 9px; }
+  #home .home-title { font-size: clamp(30px, 9.2vw, 56px); }
+}
+/* ★狭い画面ではボタンを詰めて3列に収める。
+   既定の min-width だと3個目が折り返して行が増え、キャラの居場所が消える。 */
+@media (max-width: 460px) {
+  #home .home-btn { min-width: 102px; padding: 11px 12px; font-size: 14px; }
+}
+/* ★横持ちのスマホは高さが足りない。詰めないと下段のボタンが画面外へ落ちる
+   （スクロールはできるが、出撃以外の入口が「無い」ように見える）。 */
+@media (max-height: 470px) {
+  #home .home-main { gap: 6px; }
+  #home .home-title { font-size: clamp(26px, 8.5vh, 44px); }
+  #home .home-equip { font-size: 11px; }
+  #home .home-btn { min-width: 96px; padding: 8px 14px; font-size: 13px; }
+  #home .home-btn.primary { padding: 9px 18px; }
+  #home .home-best { display: none; }
 }
 .home-title {
   font-size: clamp(34px, 11vw, 74px); font-weight: 900; line-height: .92; letter-spacing: .06em;
