@@ -53,9 +53,10 @@ import { MetaUI } from '../ui/MetaUI.js';
 import { CharacterUI } from '../ui/CharacterUI.js';
 
 import { SKILL_BY_ID } from '../data/skills.js';
-import { validateGacha } from '../data/gacha.js';
 import { STAGE_BY_ID, STAGES } from '../data/stages.js';
 import { RARITY_COLOR } from '../data/gacha.js';
+import { validateData } from '../data/validate.js';
+import { elementIndex } from '../data/elements.js';
 import { shareText, buildLine } from '../ui/share.js';
 
 export const STATE = {
@@ -75,7 +76,12 @@ export class Game {
     this.rng = new RNG();
 
     // ★確率テーブルの自己検証。データを壊したらここで気付ける
-    validateGacha();
+    // ★起動時にデータの矛盾を洗う。存在しない敵IDを湧かせる、未実装の効果IDを書く、
+    //   レアリティと強さが逆転する——どれも実際に遊ぶまで気づけない類の壊れ方なので、
+    //   ここで必ず声を上げさせる（npm run data-check が同じ検査をCIとして回す）
+    const dataCheck = validateData();
+    for (const e of dataCheck.errors) console.error(`[データ] ${e}`);
+    for (const w of dataCheck.warnings) console.warn(`[データ] ${w}`);
 
     // ★セーブは最初に読む。永続強化がステータス計算の土台になる
     this.save = new SaveManager();
@@ -376,7 +382,8 @@ export class Game {
         damage: shoot.dmg * this.spawner.atkMul,
         crit: 0, critDmg: 0, knock: 0,
         element: 'none', effects: null,
-        hostile: true, pierce: 0, visualIndex: 0,
+        // ★敵弾も属性で色を変えるが、暖色の範囲に留まる（elements.js の決め）
+        hostile: true, pierce: 0, visualIndex: elementIndex(e.arch.element),
       }
     );
   }

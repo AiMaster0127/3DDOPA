@@ -12,6 +12,7 @@ import { ENEMIES } from '../data/enemies.js';
 import { lerp, wrapAngle } from '../core/math.js';
 import { withRim } from './materials.js';
 import { makeGlowTexture } from './textures.js';
+import { ELEMENT_FX, HOSTILE_FX } from '../data/elements.js';
 import { makeEnemyGeometry } from './enemyShapes.js';
 
 // ★毎フレーム new しない。全部モジュールスコープで使い回す
@@ -115,20 +116,33 @@ export class InstanceLayer {
       return gi;
     });
 
-    // ---- 弾：1種類ぶん（武器が増えたら visualIndex で分岐させる） ----
+    // ---- 弾 ----
+    // ★自機弾と敵弾は**形から違える**。色だけで分けると、
+    //   乱戦で背景に紛れたときや色覚特性のある人には区別が付かない。
+    //   自機弾＝滑らかな流線 / 敵弾＝四角錐の棘。
     const projGeo = new THREE.CapsuleGeometry(0.16, 0.34, 3, 6);
     projGeo.rotateX(Math.PI / 2);    // +Z（進行方向）に寝かせる
-    this.projIM = new THREE.InstancedMesh(
-      projGeo,
-      // 弾は自発光に見せたいのでライティング不要。Basic がいちばん安い
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),
-      projectiles.cap
-    );
-    this.projIM.frustumCulled = false;
-    this.projIM.count = 0;
-    this.projIM.__color = new THREE.Color(0xffe9a8);
-    this.projIM.__hostileColor = new THREE.Color(0xff5a6e);   // 敵弾は赤。避けるべき物だと一目で判る
-    this.group.add(this.projIM);
+    const hostileGeo = new THREE.ConeGeometry(0.21, 0.66, 4);
+    hostileGeo.rotateX(Math.PI / 2); // 錐の先を +Z（進行方向）へ
+
+    // 弾は自発光に見せたいのでライティング不要。Basic がいちばん安い
+    const mkProj = (geo) => {
+      const im = new THREE.InstancedMesh(
+        geo, new THREE.MeshBasicMaterial({ color: 0xffffff }), projectiles.cap
+      );
+      im.frustumCulled = false;
+      im.count = 0;
+      this.group.add(im);
+      return im;
+    };
+    this.projIM = mkProj(projGeo);
+    this.hostileIM = mkProj(hostileGeo);
+
+    // ★色は起動時に作り置く。毎フレーム setHex するとsRGB変換が弾の数だけ走る
+    this.projColor = ELEMENT_FX.map(f => new THREE.Color(f.bullet));
+    this.projHalo = ELEMENT_FX.map(f => new THREE.Color(f.glow));
+    this.hostileColor = HOSTILE_FX.map(f => new THREE.Color(f.bullet));
+    this.hostileHalo = HOSTILE_FX.map(f => new THREE.Color(f.glow));
 
     // ★弾のまわりに加算の光を重ねる。全画面ブルームの代用で、
     //   これがあると「発光している」と読めるようになる。
@@ -144,6 +158,14 @@ export class InstanceLayer {
     this.projGlow.frustumCulled = false;
     this.projGlow.count = 0;
     this.group.add(this.projGlow);
+
+    // 敵弾の光は別に持つ。自機弾と同じ板に混ぜると色を分けられない
+    this.hostileGlow = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(1, 1), this.projGlow.material, projectiles.cap
+    );
+    this.hostileGlow.frustumCulled = false;
+    this.hostileGlow.count = 0;
+    this.group.add(this.hostileGlow);
 
     // ---- 経験値ジェム ----
     // ★Basic（無照明）だと八面体が真上から見て「ただの四角」に見えてしまう。
@@ -248,8 +270,8 @@ export class InstanceLayer {
   }
 
   _syncProjectiles(alpha) {
-    const im = this.projIM;
-    let n = 0;
+    let n = 0;        // 自機弾
+    let h = 0;        // 敵弾
 
     const list = this.projectiles.list;
     for (let i = 0; i < this.projectiles.cap; i++) {
@@ -259,25 +281,47 @@ export class InstanceLayer {
       _p.set(lerp(p.px, p.x, alpha), 1.0, lerp(p.pz, p.z, alpha));
       _e.set(0, p.facing, 0);
       _q.setFromEuler(_e);
-      // 敵弾は大きめ＋赤。自分の弾と混ざると避けようがない
-      _s.setScalar(p.hostile ? 1.5 : 1);
-      im.setMatrixAt(n, _m.compose(_p, _q, _s));
-      im.setColorAt(n, p.hostile ? im.__hostileColor : im.__color);
 
-      // 光の板。弾そのものより一回り大きく、カメラを向ける
-      _s.setScalar(p.hostile ? 3.0 : 2.1);
-      this.projGlow.setMatrixAt(n, _m.compose(_p, _bill, _s));
-      this.projGlow.setColorAt(n, p.hostile ? im.__hostileColor : im.__color);
-      n++;
+      // ★属性ごとの色は起動時に作り置いた配列から引く。
+      //   未知の添字でも落ちないよう 0（無属性）へ倒す
+      const vi = p.visualIndex;
+
+      if (p.hostile) {
+        // 敵弾は大きめ＋棘の形。自分の弾と混ざると避けようがない
+        _s.setScalar(1.5);
+        this.hostileIM.setMatrixAt(h, _m.compose(_p, _q, _s));
+        this.hostileIM.setColorAt(h, this.hostileColor[vi] || this.hostileColor[0]);
+        // 光の板。弾そのものより一回り大きく、カメラを向ける
+        _s.setScalar(3.0);
+        this.hostileGlow.setMatrixAt(h, _m.compose(_p, _bill, _s));
+        this.hostileGlow.setColorAt(h, this.hostileHalo[vi] || this.hostileHalo[0]);
+        h++;
+      } else {
+        _s.setScalar(1);
+        this.projIM.setMatrixAt(n, _m.compose(_p, _q, _s));
+        this.projIM.setColorAt(n, this.projColor[vi] || this.projColor[0]);
+        _s.setScalar(2.1);
+        this.projGlow.setMatrixAt(n, _m.compose(_p, _bill, _s));
+        this.projGlow.setColorAt(n, this.projHalo[vi] || this.projHalo[0]);
+        n++;
+      }
     }
 
-    im.count = n;
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    this._flush(this.projIM, n);
+    this._flush(this.projGlow, n);
+    this._flush(this.hostileIM, h);
+    this._flush(this.hostileGlow, h);
+  }
 
-    this.projGlow.count = n;
-    this.projGlow.instanceMatrix.needsUpdate = true;
-    if (this.projGlow.instanceColor) this.projGlow.instanceColor.needsUpdate = true;
+  /**
+   * 描く本数と更新フラグを立てる。
+   * ★メソッドにしておくこと。_syncProjectiles の中でアロー関数を作ると、
+   *   毎フレーム閉包を1つ確保することになる（ループ内アロケーション0の原則）。
+   */
+  _flush(mesh, count) {
+    mesh.count = count;
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
   _syncPickups(alpha) {

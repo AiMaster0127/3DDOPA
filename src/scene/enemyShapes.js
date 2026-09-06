@@ -138,6 +138,9 @@ const BUILDERS = {
   ]),
 };
 
+/** 用意されている形の一覧（データ側の指定ミスを検査するのに使う）。 */
+export const ENEMY_SHAPES = Object.keys(BUILDERS);
+
 /**
  * @param {string} kind data/enemies.js の visual.geom
  * @param {object} pal  data/enemies.js の visual.pal（ENEMY_PAL を上書き）

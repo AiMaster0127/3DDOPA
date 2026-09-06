@@ -8,41 +8,11 @@
  *   node tools/pwa-check.mjs
  */
 import { chromium } from 'playwright';
-import fs from 'node:fs';
-import path from 'node:path';
+import { missingFromPrecache } from './precache-cover.mjs';
 
 const BASE = process.env.BASE_URL || 'http://localhost:8080/';
 
-/**
- * ★プリキャッシュ一覧の「取りこぼし」検出。
- *   ファイルを足したのに sw.js へ書き忘れると、オンラインでは動くのに
- *   オフラインだけ壊れる。原因が判りにくい事故なので機械的に照合する。
- */
-function checkPrecacheCoverage() {
-  const sw = fs.readFileSync('sw.js', 'utf8');
-  const listed = new Set([...sw.matchAll(/'(\.\/[^']+)'/g)].map(m => m[1]));
-
-  const walk = (dir, out = []) => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const p = path.join(dir, e.name);
-      if (e.isDirectory()) walk(p, out);
-      else out.push('./' + p.split(path.sep).join('/'));
-    }
-    return out;
-  };
-
-  const shipped = [
-    ...walk('src'),
-    ...walk('assets'),
-    './vendor/three/three.module.min.js',
-    './vendor/three/three.core.min.js',
-    './index.html',
-    './manifest.webmanifest',
-  ].filter(f => /\.(js|css|html|webmanifest|svg|png)$/.test(f));
-
-  return shipped.filter(f => !listed.has(f));
-}
-
+// 取りこぼし検出の実装は tools/precache-cover.mjs（data-check と共有）
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium',
@@ -57,7 +27,7 @@ const check = (ok, label, detail) => {
   if (!ok) fails.push(label);
 };
 
-const uncovered = checkPrecacheCoverage();
+const uncovered = missingFromPrecache();
 check(uncovered.length === 0, 'sw.js のプリキャッシュ一覧に取りこぼしがない',
       uncovered.length ? `未登録: ${uncovered.join(', ')}` : '同梱ファイルは全て登録済み');
 

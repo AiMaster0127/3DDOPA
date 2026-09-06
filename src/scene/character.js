@@ -123,6 +123,9 @@ function longHair(S, out, cy, r) {
 
 const HAIR = { spiky: spikyHair, short: shortHair, long: longHair };
 
+/** 用意されている髪型の一覧（データ側の指定ミスを検査するのに使う）。 */
+export const HAIR_STYLES = Object.keys(HAIR);
+
 // ───────────────────────── 本体 ─────────────────────────
 
 /**

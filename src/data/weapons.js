@@ -148,10 +148,12 @@ export const WEAPONS = [
   },
   {
     id: 'wp_grave_scythe', name: '墓守ノ鎌', rarity: 'SR', type: 'axe', element: 'dark',
-    base: { atk: 38, rate: 1.3, range: 4.2, crit: 0.10, critDmg: 0.9, knock: 0.8 },
+    base: { atk: 35, rate: 1.3, range: 4.2, crit: 0.10, critDmg: 0.9, knock: 0.8 },
     growth: { atk: 3.6 },
-    // 全周に近い薙ぎ。囲まれてから振ると一番効く
-    attack: { kind: 'melee_arc', arcDeg: 220, count: 1, pierce: 99, speed: 0, life: 0.26, radius: 0.9 },
+    // 広い薙ぎ。囲まれてから振ると一番効く
+    // ★220度にしていたら SSR 最弱と差が1.03しか無くなった（validateData が検出）。
+    //   SRが上位を食う形は、引く動機をそのまま削る
+    attack: { kind: 'melee_arc', arcDeg: 200, count: 1, pierce: 99, speed: 0, life: 0.26, radius: 0.9 },
     effects: [{ id: 'burn', chance: 0.28, power: 0.30, dur: 3.5 }],
     visual: { model: 'scythe', color: 0xb49ae0, emissive: 0x3a1a6a, scale: 1.2,
               pal: { blade: 0x9a86c8, edge: 0xd8ccff, wrap: 0x2a1440, guard: 0x8a6ad0, core: 0xb04cff } },
@@ -225,8 +227,8 @@ export const WEAPONS = [
   },
   {
     id: 'wp_mist_naginata', name: '霞斬リ', rarity: 'SSR', type: 'spear', element: 'ice',
-    base: { atk: 34, rate: 2.4, range: 4.8, crit: 0.18, critDmg: 0.95, knock: 0.5 },
-    growth: { atk: 3.4 },
+    base: { atk: 37, rate: 2.4, range: 4.8, crit: 0.18, critDmg: 0.95, knock: 0.5 },
+    growth: { atk: 3.7 },
     attack: { kind: 'melee_arc', arcDeg: 130, count: 1, pierce: 99, speed: 0, life: 0.18, radius: 0.95 },
     effects: [{ id: 'freeze', chance: 0.50, power: 0.60, dur: 2.0 }],
     visual: { model: 'naginata', color: 0xb8e8ff, emissive: 0x1f5c8a, scale: 1.2,

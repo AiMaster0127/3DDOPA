@@ -6,6 +6,7 @@
  */
 import { WEAPON_BY_ID, STARTER_WEAPON } from '../data/weapons.js';
 import { GACHA } from '../data/gacha.js';
+import { elementIndex } from '../data/elements.js';
 
 export class WeaponSystem {
   /**
@@ -124,7 +125,8 @@ export class WeaponSystem {
           radius: a.radius, life: a.life,
           damage: atk, crit, critDmg, knock: w.base.knock,
           element: w.element, effects: w.effects,
-          pierce: a.pierce, visualIndex: 0,
+          // ★弾の色は装備の属性で決める。自分の武器が何をしているか判る
+          pierce: a.pierce, visualIndex: elementIndex(w.element),
         }
       );
     }

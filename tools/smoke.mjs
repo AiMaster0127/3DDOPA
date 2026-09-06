@@ -608,7 +608,29 @@ const fx = await page.evaluate(async () => {
   g.shock.update(0.001);
   const overflow = { rings: g.shock.R.n, cap: g.shock.ringCap, count: g.shock.rings.count };
 
-  return { slam, bolt, overflow };
+  // 弾：自機弾と敵弾が別のメッシュ・別の色で描かれるか
+  g.projectiles.despawnAll();
+  const { elementIndex } = await import('/src/data/elements.js');
+  const { WEAPON_BY_ID } = await import('/src/data/weapons.js');
+  const ice = [...WEAPON_BY_ID.values()].find(w => w.element === 'ice' && w.attack.kind === 'projectile');
+  let mine = null;
+  if (ice) {
+    g.inventory.grant(ice, ice.rarity); g.inventory.equip(ice.id);
+    g.weapons.equip(ice.id);
+    g.projectiles.spawn(g.player.x, g.player.z, 0, 1, 10, {
+      radius: 0.3, life: 9, damage: 1, crit: 0, critDmg: 0, knock: 0,
+      element: ice.element, effects: [], pierce: 1, visualIndex: elementIndex(ice.element),
+    });
+    mine = { want: elementIndex('ice'), got: g.projectiles.list.find(p => p.active)?.visualIndex };
+  }
+  g.projectiles.spawn(g.player.x + 2, g.player.z, 0, 1, 10, {
+    radius: 0.3, life: 9, damage: 1, crit: 0, critDmg: 0, knock: 0,
+    element: 'thunder', effects: [], pierce: 0, hostile: true, visualIndex: elementIndex('thunder'),
+  });
+  g.instances.sync(1, g.scene.camera);
+  const bullets = { mine, player: g.instances.projIM.count, hostile: g.instances.hostileIM.count };
+
+  return { slam, bolt, overflow, bullets };
 });
 
 check(fx.slam.rings >= 2 && fx.slam.discs >= 1,
@@ -620,6 +642,13 @@ check(fx.bolt.pillars >= 1, '雷属性の技には光柱が立つ', `光柱 ${fx
 check(fx.overflow.rings === fx.overflow.cap && fx.overflow.count === fx.overflow.cap,
       'エフェクトが溢れても壊れない',
       `60発中 ${fx.overflow.rings} 本を保持（上限 ${fx.overflow.cap}）`);
+
+check(!!fx.bullets.mine && fx.bullets.mine.got === fx.bullets.mine.want,
+      '自機の弾が装備の属性色になる',
+      fx.bullets.mine ? `氷の武器 → 色の添字 ${fx.bullets.mine.got}（期待 ${fx.bullets.mine.want}）` : '氷の射撃武器が無い');
+check(fx.bullets.player >= 1 && fx.bullets.hostile >= 1,
+      '自機弾と敵弾が別のメッシュで描かれる（形で区別できる）',
+      `自機弾 ${fx.bullets.player} / 敵弾 ${fx.bullets.hostile}`);
 
 // ---- メタ進行（フェーズ6） ----
 const metaRes = await page.evaluate(async () => {

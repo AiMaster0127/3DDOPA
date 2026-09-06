@@ -134,6 +134,9 @@ const DECOR_BUILDERS = {
   ]),
 };
 
+/** 用意されている装飾の一覧（データ側の指定ミスを検査するのに使う）。 */
+export const DECOR_KINDS = Object.keys(DECOR_BUILDERS);
+
 /** @param {string} kind data/themes.js の decor.kind */
 export function makeDecorGeometry(kind) {
   const build = DECOR_BUILDERS[kind];
