@@ -20,6 +20,8 @@ export class CombatSystem {
 
     // computeDamage が返す使い回しの器
     this._dmgOut = { amount: 0, isCrit: false };
+    // ★爆発・叩きつけの通知用。毎回オブジェクトを作らず、これを使い回す
+    this._blast = { x: 0, z: 0, radius: 0, color: 0xffffff, pillar: false };
   }
 
   reset() { this.kills = 0; this.damageDealt = 0; }
@@ -127,6 +129,10 @@ export class CombatSystem {
 
   /** 爆発。起点の敵自身には二重に入れない。 */
   _explode(x, z, radius, damage, source) {
+    this._blast.x = x; this._blast.z = z; this._blast.radius = radius;
+    this._blast.color = 0xff9a3c; this._blast.pillar = false;
+    this.events.emit(EV.BLAST, this._blast);
+
     const list = this.enemies.list;
     const n = this.grid.query(x, z, radius + 1.0);
     const res = this.grid.result;
@@ -287,6 +293,14 @@ export class CombatSystem {
 
   /** ボスの叩きつけなど、敵側の範囲攻撃。 */
   enemySlam(source, radius, damage, player) {
+    // ★当たったかどうかに関わらず、まず床に範囲を描く。
+    //   避けた側にも「どこまで届いたか」が残らないと、次から避けられない
+    this._blast.x = source.x; this._blast.z = source.z;
+    this._blast.radius = radius;
+    this._blast.color = source.arch?.visual?.color ?? 0xff4a3c;
+    this._blast.pillar = source.arch?.element === 'thunder';
+    this.events.emit(EV.BLAST, this._blast);
+
     const dx = player.x - source.x, dz = player.z - source.z;
     const r = radius + player.radius;
     if (dx * dx + dz * dz > r * r) return;

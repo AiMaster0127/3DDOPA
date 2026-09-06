@@ -17,6 +17,7 @@ import { PlayerView } from '../scene/PlayerView.js';
 import { InstanceLayer } from '../scene/InstanceLayer.js';
 import { BossView } from '../scene/BossView.js';
 import { Sparks } from '../scene/vfx/Sparks.js';
+import { Shockwave } from '../scene/vfx/Shockwave.js';
 import { DamageNumbers } from '../scene/vfx/DamageNumbers.js';
 import { ScreenFx } from '../scene/vfx/ScreenFx.js';
 import { AudioSystem } from '../audio/AudioSystem.js';
@@ -95,6 +96,7 @@ export class Game {
 
     // ---- 演出 ----
     this.sparks = new Sparks(this.scene.scene);
+    this.shock = new Shockwave(this.scene.scene);
     this.damageNumbers = new DamageNumbers();
     this.screenFx = new ScreenFx();
     this.audio = new AudioSystem(this.save.data.settings);
@@ -215,6 +217,7 @@ export class Game {
       this.instances.applyQuality(tier);
       this.arena.applyQuality(tier);
       this.sparks.applyQuality(tier);
+      this.shock.applyQuality(tier);
       this.damageNumbers.applyQuality(tier);
     }, initialTier);
 
@@ -235,6 +238,13 @@ export class Game {
 
   _wireEvents() {
     // 被弾は必ず体で判るようにする。数値より画面が揺れる方が速く伝わる
+    // 爆発・叩きつけ。★範囲を床に描くのは装飾ではなく「どこまで届くか」の情報
+    this.events.on(EV.BLAST, (b) => {
+      this.shock.impact(b.x, b.z, b.radius, b.color, b.pillar);
+      this.sparks.burst(b.x, 0.4, b.z, b.pillar ? 26 : 16, b.color, b.pillar ? 12 : 8);
+      if (b.radius > 4) this.cameraRig.shake(0.5);
+    });
+
     this.events.on(EV.PLAYER_HIT, (amount) => {
       this.cameraRig.shake(0.55);
       this.screenFx.hit('#ff2b4d', 0.34, 240);
@@ -346,6 +356,10 @@ export class Game {
   _onBossSpawn(e) {
     this.bossView.attach(e);
     this.cameraRig.shake(0.9);
+    // ★降着の衝撃。banner と音だけだと「いつの間にか居た」になる
+    this.shock.ring(e.x, e.z, e.radius * 4.2, e.arch.visual.color, 0.75, 0.4);
+    this.shock.ring(e.x, e.z, e.radius * 2.2, 0xffffff, 0.5, 0.2);
+    this.sparks.burst(e.x, 0.5, e.z, 46, e.arch.visual.color, 13);
     this.screenFx.hit('#ff2b4d', 0.4, 400);
     this.screenFx.bannerShow('WARNING', e.arch.name, 'boss', 1600);
     this.audio.bossSpawn();
@@ -448,6 +462,7 @@ export class Game {
     this.hud.hide();
     this.bossView.detach();
     this.sparks.clear();
+    this.shock.clear();
     this.damageNumbers.clear();
     this.screenFx.hideBanner();
     this.audio.stopBgm();
@@ -511,6 +526,7 @@ export class Game {
     this.cameraRig.reset();
     this.levelUpUI.hide();
     this.sparks.clear();
+    this.shock.clear();
     this.damageNumbers.clear();
     this.screenFx.hideBanner();
     if (this.save.data.settings.bgm > 0) this.audio.startBgm();
@@ -654,6 +670,7 @@ export class Game {
     this.bossView.sync(boss, alpha, dt);
 
     this.sparks.update(dt);
+    this.shock.update(dt);
     // 拠点では舞台を見せるカメラに切り替える。戦闘の視点では景色が画面に入らない
     if (this.state === STATE.HOME) this.cameraRig.showcase(dt, this.arena.radius);
     else this.cameraRig.follow(this.player, dt);

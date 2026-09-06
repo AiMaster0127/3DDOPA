@@ -53,4 +53,7 @@ export const EV = {
   RUN_STARTED:   'run:started',     // ()
   LEVEL_UP:      'run:levelup',     // (newLevel)
   XP_GAINED:     'run:xp',          // (amount)
+  // 爆発・叩きつけ。★引数は使い回しのオブジェクト1つ（emit は最大3引数、
+  //   かつ毎フレームのアロケーションを避けるため）。受け取ったらその場で使い切ること
+  BLAST:         'fx:blast',        // ({x, z, radius, color, pillar})
 };

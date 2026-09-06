@@ -93,6 +93,7 @@ export class BossView {
     this.rig.scale.setScalar((e.radius * 0.92) / halfW);
     this.ring.scale.setScalar(e.radius);
     this._hover = v.hover || 0;
+    this._entry = 0;                 // 登場演出の進み具合（0→1）
     this.group.visible = true;
   }
 
@@ -115,8 +116,28 @@ export class BossView {
     const breathe = Math.sin(this._idle * 1.6) * 0.012;
     // ★回転はさせない。ボスは口や角の向きで狙いを伝えているので、
     //   胴を回すと「どこを向いているか」が読めなくなる
-    this.rig.position.y = this._hover ? Math.sin(this._idle * 1.1) * 0.22 : 0;
-    this.rig.scale.y = this.rig.scale.x * (1 + breathe);
+    let y = this._hover ? Math.sin(this._idle * 1.1) * 0.22 : 0;
+    let squash = 1;
+
+    // ---- 登場：上から落ちてきて着地する ----
+    // ★「気づいたら居た」を避ける。降ってくる0.5秒があるだけで格が変わる。
+    //   論理側はもう動いているので、見た目だけを遅らせる（当たり判定はズレない）
+    if (this._entry < 1) {
+      this._entry = Math.min(1, this._entry + dt / 0.55);
+      const t = this._entry;
+      if (t < 0.8) {
+        const k = 1 - t / 0.8;
+        y += k * k * 16;                       // 落下
+        squash = 1 - k * 0.10;
+      } else {
+        // 着地の潰し。線形に戻すと「乗っただけ」に見える
+        const k = (t - 0.8) / 0.2;
+        squash = 1 - Math.sin(k * Math.PI) * 0.14;
+      }
+    }
+
+    this.rig.position.y = y;
+    this.rig.scale.y = this.rig.scale.x * (1 + breathe) * squash;
 
     // ★状態を色で伝える：溜め=黄 / 突進=赤 / 通常=素の色
     const windup = e.aiState === 1 || e.aiState === 3;

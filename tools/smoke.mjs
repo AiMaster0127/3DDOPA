@@ -578,6 +578,49 @@ check(!!bosses.drake && bosses.drake.fired > 0 && bosses.drake.charged,
       '雷龍が雷を撃ち、突進もしてくる',
       bosses.drake ? `敵弾 ${bosses.drake.fired} 発 / 突進 ${bosses.drake.charged}` : '—');
 
+// ---- 技が画に出ているか ----
+// ★判定とダメージだけで画に何も出ない攻撃は、避け方を体で覚えられない。
+//   「範囲が床に描かれること」を機械的に確かめる。
+const fx = await page.evaluate(async () => {
+  const g = __DOPA.game;
+  g.selectStage(3); g.startRun(); g.player.takeDamage = () => false;
+  g.shock.clear();
+
+  // ボスの叩きつけ：輪と閃光が出るか。★当たらなくても出ること
+  const boss = g.spawner.spawnAt('bs_gorehorn', g.player.x + 30, g.player.z);
+  const before = { r: g.shock.R.n, d: g.shock.D.n };
+  g.enemies.ctx.slam(boss, boss.arch.slam.radius, boss.arch.slam.dmg);
+  // ★最後に積んだのは内側の輪。範囲を表すのは一番大きい方
+  let maxR = 0;
+  for (let i = 0; i < g.shock.R.n; i++) maxR = Math.max(maxR, g.shock.R.r1[i]);
+  const slam = { rings: g.shock.R.n - before.r, discs: g.shock.D.n - before.d, radius: maxR };
+
+  // 雷属性は光柱が付くか
+  g.shock.clear();
+  const drake = g.spawner.spawnAt('bs_thunderdrake', g.player.x + 30, g.player.z + 4);
+  g.enemies.ctx.slam(drake, drake.arch.slam.radius, drake.arch.slam.dmg);
+  const bolt = { pillars: g.shock.P.n };
+
+  // 溢れても壊れないこと（一番古いものを潰して出し続ける）
+  g.shock.clear();
+  for (let i = 0; i < 60; i++) g.shock.impact(i, 0, 3, 0xffffff, false);
+  // ★InstancedMesh の count は update() で初めて反映される
+  g.shock.update(0.001);
+  const overflow = { rings: g.shock.R.n, cap: g.shock.ringCap, count: g.shock.rings.count };
+
+  return { slam, bolt, overflow };
+});
+
+check(fx.slam.rings >= 2 && fx.slam.discs >= 1,
+      'ボスの叩きつけが床に範囲を描く',
+      `輪 ${fx.slam.rings} / 閃光 ${fx.slam.discs} / 半径 ${fx.slam.radius}`);
+check(Math.abs(fx.slam.radius - 6.5) < 0.01,
+      '描く範囲が実際の当たり判定と一致する', `描画 ${fx.slam.radius} / 判定 6.5`);
+check(fx.bolt.pillars >= 1, '雷属性の技には光柱が立つ', `光柱 ${fx.bolt.pillars} 本`);
+check(fx.overflow.rings === fx.overflow.cap && fx.overflow.count === fx.overflow.cap,
+      'エフェクトが溢れても壊れない',
+      `60発中 ${fx.overflow.rings} 本を保持（上限 ${fx.overflow.cap}）`);
+
 // ---- メタ進行（フェーズ6） ----
 const metaRes = await page.evaluate(async () => {
   const g = __DOPA.game;
