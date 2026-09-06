@@ -29,6 +29,9 @@ function hasWebGL() {
  *   file:// や非セキュアコンテキストでは登録できないので、静かに諦める。
  */
 async function registerServiceWorker() {
+  // ★単一HTMLビルド（tools/build-single.mjs）には sw.js が同梱されない。
+  //   登録を試みても失敗するだけなので、最初から呼ばない。
+  if (globalThis.__DOPA_SINGLE__) return null;
   if (!('serviceWorker' in navigator)) return null;
   if (!globalThis.isSecureContext) return null;
   try {

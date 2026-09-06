@@ -221,8 +221,35 @@ npm run smoke        # 起動・移動・壁・draw call・HUD・コンソール
 npm run perf         # JSフレームコストとループ内アロケーションを計測
 npm run gacha-audit  # 排出確率・天井・10連保証を大量試行で検証
 npm run pwa          # Service Worker登録 → 回線切断 → 本当にオフラインで遊べるか
+npm run build        # 単一HTMLに畳む（dist/dopa-arena.html）
+npm run single       # 畳んだ1ファイルを実ブラウザで起動・操作・保存まで確認
 npm run check        # 上を全部まとめて実行
 ```
+
+**単一HTMLビルド（`npm run build`）**
+
+`tools/build-single.mjs` が ES Modules 一式（three.js 含む73ファイル）を1つの
+`<script type="module">` に畳んで `dist/dopa-arena.html` を出す。約1.25MB。
+**HTTPサーバを立てられない場所で配りたいとき**に使う。開発は普段どおり素のモジュールで行う。
+
+各モジュールを IIFE で包み、`import` を親スコープからの分割代入に、`export` を戻り値の
+オブジェクトに書き換える。スコープが分かれるので名前衝突は起きない。
+
+> ★**解釈できない書き方に出会ったら必ず落とす。** 黙って読み飛ばすと、
+> 「構文は通るが一部だけ死んでいる」バンドルが出る。実際にこれで2回騙されかけた。
+>
+> - minify 済みの three.js は `import{A as e,...}from"..."` と**空白が無い**。
+>   `import\s+` にすると一致せず、剥がし残しに気付かないまま出力されていた
+> - three.js は `export{...}from"./three.core.min.js"`（再エクスポート）を使う。
+>   これを知らずに `export{...}` だけ剥がすと `from"..."` が文の途中に取り残される
+>
+> 対策として、畳んだJSを `node:vm` の `Script` で**構文解析してから**書き出す。
+> 連番IDの重複バグ（`mods.size` から採番していて依存を先にたどる間に衝突）も
+> これが見つけた。
+
+`npm run single` は出力を実ブラウザで開き、起動・移動・撃破・ガチャ・localStorage 保存まで
+通す。**構文が通るだけでは足りない**（評価順が狂うと参照だけ undefined になり静かに死ぬ）。
+テスト用サーバは本体1ファイル以外を404にして、「実は外部ファイルを読んでいた」も暴く。
 
 **データの自己検査（`npm run data-check`）**
 
