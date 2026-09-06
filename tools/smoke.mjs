@@ -938,6 +938,106 @@ await page.waitForTimeout(500);
 await page.screenshot({ path: OUT });
 console.log(`\nスクリーンショット: ${OUT}`);
 
+// ★元のページを閉じてから走らせる。ソフトウェア描画で2ページ同時に回すと
+//   どちらも進まなくなり、クリックがタイムアウトする（実際にそれで落ちた）。
+await page.context().close();
+
+// ---- 壊れたセーブでも起動して遊べるか ----
+// ★ tools/save-check.mjs が変換ロジックを検査する。ここは「実際にゲームが起動するか」だけを見る。
+//   純粋関数の検査だけでは、起動時に誰かが古い形を直接読んでいる事故を捕まえられない。
+if (MODE === 'desktop') {
+  const HOSTILE_SAVE = JSON.stringify({
+    v: 1,
+    meta: {
+      character: 'ch_deleted', lastStage: 999,
+      upgrades: { hp: 9999, ghost: 3 }, unlocks: ['bogus_flag'], clearedStages: { 1: true, 77: true },
+    },
+    wallet: { gems: 'abc', tickets: -5, dust: null },
+    inventory: { weapons: { wp_gone: { lv: 999 } }, equipped: 'wp_gone' },
+    gacha: { sinceSSR: 99999, history: 'nope' },
+    settings: { sfx: 99, quality: 'ultra', autoFire: 'yes' },
+    stats: null,
+  });
+
+  const ctx2 = await browser.newContext(VIEW);
+  const p2 = await ctx2.newPage();
+  const errs2 = [];
+  p2.on('pageerror', e => errs2.push(String(e)));
+  p2.on('console', m => { if (m.type() === 'error') errs2.push(`[error] ${m.text()}`); });
+  await p2.addInitScript(save => {
+    localStorage.setItem('dopa_arena_save', save);
+  }, HOSTILE_SAVE);
+
+  // ★前面に出す。背面のページは rAF が止まり「動かない＝壊れている」と誤検出する
+  await p2.bringToFront();
+  await p2.goto(BASE, { waitUntil: 'load' });
+  await p2.waitForFunction(() => {
+    const m = document.getElementById('bootMsg');
+    return m && (m.textContent.trim() === 'READY' || m.textContent.includes('起動'));
+  }, { timeout: 20000 }).catch(() => {});
+  const boot2 = (await p2.textContent('#bootMsg')).trim();
+  check(boot2 === 'READY', '壊れたセーブでも起動する', boot2);
+
+  if (boot2 === 'READY') {
+    // ★補正の結果は「はじめる」を押す前に読む。
+    //   押した後だと実績の自動達成で報酬が入り、ジェムなどが動いてしまう。
+    const fixed = await p2.evaluate(() => {
+      const d = __DOPA.game.save.data;
+      return {
+        character: d.meta.character, equipped: d.inventory.equipped,
+        gems: d.wallet.gems, tickets: d.wallet.tickets, dust: d.wallet.dust,
+        hp: d.meta.upgrades.hp, ghost: d.meta.upgrades.ghost,
+        stage: d.meta.lastStage, sfx: d.settings.sfx, quality: d.settings.quality,
+        autoFire: d.settings.autoFire, sinceSSR: d.gacha.sinceSSR,
+        unlocks: d.meta.unlocks.length,
+        history: Array.isArray(d.gacha.history) ? d.gacha.history.length : -1,
+        repairs: __DOPA.game.save.repairs.length,
+      };
+    });
+    check(fixed.character === 'ch_vanguard' && fixed.equipped === 'wp_iron_sword' &&
+          fixed.gems === 0 && fixed.tickets === 0 && fixed.dust === 0 &&
+          fixed.hp === 10 && fixed.ghost === undefined && fixed.stage === 2 &&
+          fixed.sfx === 1 && fixed.quality === 'auto' && fixed.autoFire === true &&
+          fixed.sinceSSR === 70 && fixed.unlocks === 0 && fixed.history === 0,
+          '壊れた値が起動時に直っている',
+          `キャラ=${fixed.character} / 装備=${fixed.equipped} / ジェム=${fixed.gems} / ` +
+          `強化hp=${fixed.hp} / ステージ=${fixed.stage} / 天井=${fixed.sinceSSR} / ` +
+          `画質=${fixed.quality}（補正 ${fixed.repairs} 件）`);
+
+    // ★ここを飛ばすとゲームループ自体が始まらず「動かない」と誤検出する
+    await p2.click('#startBtn', { timeout: 60000 });
+    await p2.waitForTimeout(300);
+    await p2.evaluate(() => { __DOPA.game.quality.setMode('low'); __DOPA.game.startRun(); });
+    await p2.waitForFunction(() => __DOPA.game.state === 'playing', null, { timeout: 20000 }).catch(() => {});
+
+    // ★実際に動かして描かせる。壊れたIDが残っていると描画側で落ちる
+    const from = await p2.evaluate(() => ({ x: __DOPA.game.player.x, z: __DOPA.game.player.z }));
+    await p2.keyboard.down('d');
+    await p2.waitForFunction((b) => {
+      const p = __DOPA.game.player;
+      return Math.hypot(p.x - b.x, p.z - b.z) > 1.5;
+    }, from, { timeout: 20000 }).catch(() => {});
+    await p2.keyboard.up('d');
+
+    const rescued = await p2.evaluate((b) => {
+      const g = __DOPA.game;
+      return {
+        moved: Math.hypot(g.player.x - b.x, g.player.z - b.z),
+        drawn: g.scene.drawCalls,
+        stage: g.stageId,
+        state: g.state,
+      };
+    }, from);
+
+    check(rescued.moved > 0.5 && rescued.drawn > 5 && rescued.state === 'playing',
+          '壊れたセーブから始めても遊べる',
+          `ステージ${rescued.stage} / 移動 ${rescued.moved.toFixed(2)} ユニット / draw ${rescued.drawn}`);
+  }
+  check(errs2.length === 0, '壊れたセーブでページエラーが出ない', errs2.join(' | ') || 'なし');
+  await ctx2.close();
+}
+
+
 await browser.close();
 if (fails.length) { console.error(`\n失敗 ${fails.length} 件: ${fails.join(', ')}`); process.exit(1); }
 console.log('\nすべて合格');

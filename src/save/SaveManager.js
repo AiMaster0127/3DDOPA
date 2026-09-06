@@ -5,26 +5,19 @@
  * ★ただし「失うと痛いもの」（ガチャ排出・レベルアップ・ラン終了）は即時 flush する。
  * ★localStorage は落ちる前提で書く（プライベートモード・容量超過）。
  *   保存に失敗してもゲームは絶対に止めない。
+ *
+ * ★このクラスはストレージ入出力だけを持つ。
+ *   「文字列 → 正しい形の状態」への変換は migrate.js（DOM非依存・単体テスト可能）にある。
  */
-import { SAVE_KEY, BACKUP_KEY, SAVE_VERSION, INITIAL_SAVE, MIGRATIONS } from './schema.js';
+import { SAVE_KEY, BACKUP_KEY } from './schema.js';
+import { parseSave, freshSave } from './migrate.js';
 
 const DEBOUNCE_MS = 800;
 
-/** 初期値を土台に、保存値を上書きする。旧セーブに無いフィールドが自動で埋まる。 */
-function deepMerge(base, patch) {
-  if (patch === null || patch === undefined) return base;
-  if (typeof base !== 'object' || Array.isArray(base) || base === null) return patch;
-  if (typeof patch !== 'object' || Array.isArray(patch)) return patch;
-
-  const out = Array.isArray(base) ? base.slice() : { ...base };
-  for (const k of Object.keys(patch)) out[k] = deepMerge(base[k], patch[k]);
-  return out;
-}
-
-const clone = (o) => JSON.parse(JSON.stringify(o));
-
 export class SaveManager {
   constructor() {
+    /** 読み込み時に直した内容。設定画面やデバッグから覗ける（ゲーム進行は読まない） */
+    this.repairs = [];
     this.data = this.load();
     this._dirty = false;
     this._timer = 0;
@@ -38,37 +31,27 @@ export class SaveManager {
   load() {
     let raw = null;
     try { raw = localStorage.getItem(SAVE_KEY); }
-    catch { return clone(INITIAL_SAVE); }          // ストレージ自体が触れない環境
+    catch { return freshSave(Date.now()); }          // ストレージ自体が触れない環境
 
-    if (!raw) return clone(INITIAL_SAVE);
+    if (!raw) return freshSave(Date.now());
 
     try {
-      return this._parse(raw);
+      return this._accept(parseSave(raw));
     } catch (err) {
       console.warn('セーブが壊れている。バックアップを試す', err);
       try {
         const bk = localStorage.getItem(BACKUP_KEY);
-        if (bk) return this._parse(bk);
+        if (bk) return this._accept(parseSave(bk), 'バックアップから復旧した');
       } catch { /* バックアップも駄目なら初期値へ */ }
-      return clone(INITIAL_SAVE);
+      return freshSave(Date.now());
     }
   }
 
-  _parse(raw) {
-    let s = JSON.parse(raw);
-    if (typeof s !== 'object' || s === null) throw new Error('セーブがオブジェクトではない');
-
-    // 古い形式を順に前進させる
-    let guard = 0;
-    while ((s.v | 0) < SAVE_VERSION) {
-      const next = (s.v | 0) + 1;
-      const fn = MIGRATIONS[next];
-      if (!fn) { s.v = SAVE_VERSION; break; }     // 移行関数が無ければ追加のみとみなす
-      s = fn(s);
-      if (++guard > 64) throw new Error('マイグレーションが収束しない');
-    }
-
-    return deepMerge(clone(INITIAL_SAVE), s);
+  _accept(res, note) {
+    this.repairs = res.repairs;
+    if (note) this.repairs.unshift(note);
+    if (this.repairs.length) console.info('セーブを補正した:', this.repairs);
+    return res.data;
   }
 
   /** 変更あり。しばらくして書く。 */
@@ -105,11 +88,17 @@ export class SaveManager {
     return this.flush();
   }
 
-  /** デバッグ・設定画面からの初期化用。 */
+  /**
+   * デバッグ・設定画面からの初期化用。
+   * ★バックアップも消す。残したままだと、次に保存が壊れた時に初期化前のデータが蘇る。
+   */
   reset() {
-    this.data = clone(INITIAL_SAVE);
-    this.data.profile.createdAt = Date.now();
+    this.data = freshSave(Date.now());
+    this.repairs = [];
     this._dirty = true;
-    return this.flush();
+    const wrote = this.flush();
+    // ★必ず flush の「後」に消す。先に消しても flush が直前の本体をバックアップへ書き戻してしまう
+    try { localStorage.removeItem(BACKUP_KEY); } catch { /* 触れなくても続行 */ }
+    return wrote;
   }
 }

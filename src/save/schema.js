@@ -5,6 +5,8 @@
  *   読み込み時に初期値とディープマージするので、旧セーブにも自動で生える。
  * ★形を「変える」ときだけ SAVE_VERSION を上げて MIGRATIONS に関数を足す。
  */
+import { UPGRADES } from '../data/upgrades.js';
+
 export const SAVE_KEY = 'dopa_arena_save';
 export const BACKUP_KEY = 'dopa_arena_save_backup';
 export const SAVE_VERSION = 1;
@@ -18,7 +20,8 @@ export const INITIAL_SAVE = {
   meta: {
     accountLv: 1,
     accountXp: 0,
-    upgrades: { hp: 0, atk: 0, speed: 0, gachaLuck: 0 },   // フェーズ6の拠点強化
+    // ★拠点強化はマスタから生やす。手で並べるとIDがずれて「買ったのに反映されない」が起きる
+    upgrades: Object.fromEntries(UPGRADES.map(u => [u.id, 0])),
     unlocks: [],
     clearedStages: {},      // ステージID → true（初回クリア済み）
     lastStage: 1,           // 最後に選んだステージ

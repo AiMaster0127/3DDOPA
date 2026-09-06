@@ -216,6 +216,7 @@ npx serve -l 8080
 npm install          # Playwright のみ
 npm run serve        # 別ターミナルで起動しておく
 npm run data-check   # データの矛盾を洗う（ブラウザ不要・数百ms）
+npm run save-check   # 旧・壊れ・改竄セーブを流して互換性を確認（ブラウザ不要）
 npm run smoke        # 起動・移動・壁・draw call・HUD・コンソール汚染を3ビューポートで確認
 npm run perf         # JSフレームコストとループ内アロケーションを計測
 npm run gacha-audit  # 排出確率・天井・10連保証を大量試行で検証
@@ -527,7 +528,7 @@ effects: [
 ## セーブデータ構造
 
 - **保存先**：`localStorage`
-- **キー**：`dopa_arena_save`（バックアップ：`dopa_arena_save_backup`）
+- **キー**：`dopa_arena_save`（バックアップ：`dopa_arena_save_backup`。1世代だけ残す）
 - **バージョン管理**：`v` フィールド。`MIGRATIONS` を段階適用して前進させる。
 - **フィールド追加**：`INITIAL_SAVE` に足すだけでよい。読み込み時に初期値とディープマージするので、
   旧セーブにも自動で生える。`SAVE_VERSION` を上げるのは「形を変える」ときだけ。
@@ -539,21 +540,80 @@ effects: [
   "v": 1,
   "profile":   { "createdAt": 0, "playTimeMs": 0, "lastPlayed": 0 },
   "meta":      { "accountLv": 1, "accountXp": 0,
-                 "upgrades": { "hp": 0, "atk": 0, "speed": 0, "gachaLuck": 0, "startLv": 0 },
-                 "unlocks": [] },
+                 // ★拠点強化のIDは data/upgrades.js から生やす（手書きしない）
+                 "upgrades": { "hp": 0, "atk": 0, "speed": 0, "crit": 0,
+                               "pickup": 0, "guard": 0, "startLv": 0, "dust": 0 },
+                 "unlocks": [], "clearedStages": {}, "lastStage": 1,
+                 "character": "ch_vanguard" },
   "wallet":    { "gems": 0, "tickets": 3, "dust": 0 },
-  "inventory": { "weapons": { "wp_iron_sword": { "lv": 1, "lb": 0, "shards": 0 } },
+  "inventory": { "weapons": { "wp_iron_sword": { "lv": 1, "lb": 0, "shards": 0, "obtainedAt": 0 } },
                  "equipped": "wp_iron_sword" },
   "gacha":     { "totalPulls": 0, "sinceSSR": 0, "lostFiftyFifty": false, "history": [] },
-  "stats":     { "bestStage": 0, "bestTimeMs": 0, "totalKills": 0, "totalBosses": 0, "ssrCount": 0 },
+  "stats":     { "bestStage": 0, "bestTimeMs": 0, "bestRunLv": 0,
+                 "totalKills": 0, "totalBosses": 0, "totalRuns": 0, "ssrCount": 0 },
   "achievements": {},
-  "settings":  { "sfx": 0.8, "bgm": 0.5, "quality": "auto", "stickSide": "left", "autoFire": true }
+  "settings":  { "sfx": 0.8, "bgm": 0.5, "quality": "auto", "autoFire": true }
 }
 ```
 
 書き込みは 800ms のデバウンスで集約する。ただし
 **ガチャ排出・レベルアップ・ステージクリアは即時 flush**（演出の再生よりも前に確定させる）。
 `pagehide` と `visibilitychange` でも必ず保存する。
+
+### 層の分け方
+
+| ファイル | 責務 |
+|---|---|
+| `src/save/schema.js` | 形の定義（`INITIAL_SAVE`）と `MIGRATIONS` |
+| `src/save/migrate.js` | **文字列 → 遊べる状態**。DOM に触れない純粋関数だけ |
+| `src/save/SaveManager.js` | `localStorage` の入出力とデバウンスだけ |
+
+★変換を `migrate.js` に切り出しているのは、**ブラウザ無しでテストするため**。
+`tools/save-check.mjs` が古い・壊れた・改竄されたセーブを直接流して検証する。
+
+### 読み込み時に必ずやること
+
+セーブは「静かに壊れる」場所である。読めてしまうので気づかず、
+数日後に「ガチャの天井が来ない」「キャラが選べない」という形で出る。
+そこで読み込みは3段構えにしてある。
+
+1. **マイグレーション**（`runMigrations`）— `v` を1つずつ前進させる。
+   ★移行関数が**歯抜けでも止まらない**。`MIGRATIONS[2]` が無く `[3]` だけある場合でも
+   2 を素通りして 3 を必ず適用する（＝フィールド追加だけの版を間に挟める）。
+   移行関数が `v` を書き忘れても呼び出し側が前進させるので、無限ループしない。
+2. **ディープマージ** — 足りないフィールドを `INITIAL_SAVE` から埋める。
+   `__proto__` / `constructor` / `prototype` は踏まない（プロトタイプが差し替わると
+   以後その枝の挙動が説明できなくなる）。深さも12段で切る。
+3. **サニタイズ**（`sanitize`）— 型・範囲・参照先を正す。
+
+| 直すもの | 例 |
+|---|---|
+| 型 | `gems: "abc"` / `null` / `NaN` / `Infinity` → 既定値 |
+| 範囲 | 拠点強化が `max` 超え、天井カウンタが 99999、音量が 99 |
+| 消えたコンテンツ | 削除した武器ID・実績ID・解放フラグ・ステージIDを落とす |
+| 壊れる参照 | 存在しない／未解放のキャラ、所持していない武器の装備 → 既定へ |
+| 肥大化 | ガチャ履歴を直近50件に切り詰める |
+
+★**時刻の上限とカウンタの上限は別にする。** 同じ 1e12 で丸めると現在時刻
+（1.7e12）が過去に飛ぶ。取得日時が全部同じになって並び順が壊れた。
+
+### 新しいビルドのセーブを古いビルドが読んだとき
+
+Service Worker が古いビルドを返す、端末を戻す、といった経路で起きる。
+このとき `v > SAVE_VERSION` になる。
+
+★**知らないIDは消さない。** こちらが知らないだけの武器や実績を消すと、
+新しいビルドに戻った時に進行が失われる。参照側はすべてマスタから引くので、
+知らないIDが所持データに混ざっていても実害は無い。
+ただし**描画が落ちる参照**（存在しないキャラID）だけは、この場合も既定に戻す。
+
+### セーブの形を変えるとき
+
+1. `SAVE_VERSION` を上げ、`MIGRATIONS[新バージョン]` に変換関数を足す
+2. `tools/save-check.mjs` の `OLD_SAVES` に**その版の実物**を1件足す
+3. `npm run save-check`
+
+★2 を飛ばさないこと。「昔のセーブが読めるか」は実物を通す以外に確かめようがない。
 
 ---
 
